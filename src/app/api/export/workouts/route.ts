@@ -1,17 +1,26 @@
 import { NextResponse } from 'next/server';
 import { getDatabase, parseJson } from '../../../../lib/database';
 import { format } from 'date-fns';
+import { getServerSession } from 'next-auth/next';
+import { authOptions } from '../../../../lib/auth';
 
 // GET /api/export/workouts - Export workouts as CSV
 export async function GET() {
   try {
+    const session = await getServerSession(authOptions);
+    if (!session?.user?.id) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+
+    const userId = session.user.id;
     const db = getDatabase();
 
     // Fetch all workout sessions with exercises
     const sessions = db.prepare(`
       SELECT * FROM workout_sessions
+      WHERE user_id = ?
       ORDER BY date DESC
-    `).all();
+    `).all(userId);
 
     if (sessions.length === 0) {
       return new Response('No workouts to export', { status: 404 });
@@ -28,19 +37,19 @@ export async function GET() {
 
     let csvContent = csvHeaders.join(',') + '\n';
 
-    for (const session of sessions) {
+    for (const sessionRow of sessions) {
       // Fetch exercise sessions for this workout
       const exerciseSessions = db.prepare(`
         SELECT * FROM exercise_sessions
-        WHERE workout_session_id = ?
+        WHERE workout_session_id = ? AND user_id = ?
         ORDER BY id
-      `).all(session.id);
+      `).all(sessionRow.id, userId);
 
       if (exerciseSessions.length === 0) {
         // Add session row even if no exercises
         csvContent += [
-          format(new Date(session.date), 'yyyy-MM-dd'),
-          `"${session.template_name}"`,
+          format(new Date(sessionRow.date), 'yyyy-MM-dd'),
+          `"${sessionRow.template_name}"`,
           '',
           '',
           ''
@@ -53,35 +62,39 @@ export async function GET() {
 
         // Format exercise details based on type
         switch (exercise.type) {
-          case 'strength':
+          case 'strength': {
             const strengthData = parseJson(exercise.strength_data);
             if (strengthData?.sets?.length > 0) {
-              details = strengthData.sets.map((set: any) => `${set.weight}kg × ${set.reps}`).join(', ');
+              details = strengthData.sets.map((set: any) => `${set.weight}kg x ${set.reps}`).join(', ');
             }
             break;
-          case 'cardio':
+          }
+          case 'cardio': {
             const cardioData = parseJson(exercise.cardio_data);
             if (cardioData) {
               details = `${cardioData.time}min, Level ${cardioData.level}, ${cardioData.distance}km`;
             }
             break;
-          case 'endurance':
+          }
+          case 'endurance': {
             const enduranceData = parseJson(exercise.endurance_data);
             if (enduranceData) {
               details = `${enduranceData.time}min, ${enduranceData.distance}km, ${enduranceData.pace}min/km`;
             }
             break;
-          case 'stretch':
+          }
+          case 'stretch': {
             const stretchData = parseJson(exercise.stretch_data);
             if (stretchData) {
               details = stretchData.completed ? 'Completed' : 'Not completed';
             }
             break;
+          }
         }
 
         csvContent += [
-          format(new Date(session.date), 'yyyy-MM-dd'),
-          `"${session.template_name}"`,
+          format(new Date(sessionRow.date), 'yyyy-MM-dd'),
+          `"${sessionRow.template_name}"`,
           `"${exercise.exercise_name}"`,
           exercise.type,
           `"${details}"`

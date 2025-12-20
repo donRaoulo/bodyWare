@@ -2,17 +2,30 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getDatabase } from '../../../lib/database';
 import { BodyMeasurement, ApiResponse } from '../../../lib/types';
 import { v4 as uuidv4 } from 'uuid';
+import { getServerSession } from 'next-auth/next';
+import { authOptions } from '../../../lib/auth';
 
 // GET /api/measurements - Fetch body measurements
 export async function GET() {
   try {
+    const session = await getServerSession(authOptions);
+    if (!session?.user?.id) {
+      return NextResponse.json<ApiResponse<BodyMeasurement[]>>({
+        success: false,
+        error: 'Unauthorized',
+      }, { status: 401 });
+    }
+
+    const userId = session.user.id;
     const db = getDatabase();
 
     const measurements = db.prepare(`
       SELECT * FROM body_measurements
+      WHERE user_id = ?
       ORDER BY date DESC
-    `).all().map((row: any) => ({
+    `).all(userId).map((row: any) => ({
       id: row.id,
+      userId: row.user_id,
       date: new Date(row.date),
       weight: row.weight || undefined,
       chest: row.chest || undefined,
@@ -40,6 +53,15 @@ export async function GET() {
 // POST /api/measurements - Create new body measurement
 export async function POST(request: NextRequest) {
   try {
+    const session = await getServerSession(authOptions);
+    if (!session?.user?.id) {
+      return NextResponse.json<ApiResponse<BodyMeasurement>>({
+        success: false,
+        error: 'Unauthorized',
+      }, { status: 401 });
+    }
+
+    const userId = session.user.id;
     const body = await request.json();
     const { date, weight, chest, waist, hips, upperArm, forearm, thigh, calf }: {
       date: string;
@@ -77,10 +99,11 @@ export async function POST(request: NextRequest) {
     // Insert measurement
     db.prepare(`
       INSERT INTO body_measurements (
-        id, date, weight, chest, waist, hips, upper_arm, forearm, thigh, calf
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        id, user_id, date, weight, chest, waist, hips, upper_arm, forearm, thigh, calf
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `).run(
       id,
+      userId,
       date,
       weight || null,
       chest || null,
@@ -93,10 +116,11 @@ export async function POST(request: NextRequest) {
     );
 
     // Fetch created measurement
-    const measurement = db.prepare('SELECT * FROM body_measurements WHERE id = ?').get(id);
+    const measurement = db.prepare('SELECT * FROM body_measurements WHERE id = ? AND user_id = ?').get(id, userId);
 
     const responseMeasurement: BodyMeasurement = {
       id: measurement.id,
+      userId: measurement.user_id,
       date: new Date(measurement.date),
       weight: measurement.weight || undefined,
       chest: measurement.chest || undefined,

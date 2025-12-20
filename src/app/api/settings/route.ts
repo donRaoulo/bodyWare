@@ -1,26 +1,39 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getDatabase } from '../../../lib/database';
 import { UserSettings, ApiResponse } from '../../../lib/types';
+import { getServerSession } from 'next-auth/next';
+import { authOptions } from '../../../lib/auth';
+import { v4 as uuidv4 } from 'uuid';
 
 // GET /api/settings - Fetch user settings
 export async function GET() {
   try {
+    const session = await getServerSession(authOptions);
+    if (!session?.user?.id) {
+      return NextResponse.json<ApiResponse<UserSettings>>({
+        success: false,
+        error: 'Unauthorized',
+      }, { status: 401 });
+    }
+
+    const userId = session.user.id;
     const db = getDatabase();
 
-    let settings = db.prepare('SELECT * FROM user_settings WHERE id = ?').get('default');
+    let settings = db.prepare('SELECT * FROM user_settings WHERE user_id = ?').get(userId);
 
     // Create default settings if not exist
     if (!settings) {
       db.prepare(`
-        INSERT INTO user_settings (id, dashboard_session_limit, dark_mode)
-        VALUES (?, ?, ?)
-      `).run('default', 5, false);
+        INSERT INTO user_settings (id, user_id, dashboard_session_limit, dark_mode)
+        VALUES (?, ?, ?, ?)
+      `).run(uuidv4(), userId, 5, false);
 
-      settings = db.prepare('SELECT * FROM user_settings WHERE id = ?').get('default');
+      settings = db.prepare('SELECT * FROM user_settings WHERE user_id = ?').get(userId);
     }
 
     const responseSettings: UserSettings = {
       id: settings.id,
+      userId: settings.user_id,
       dashboardSessionLimit: settings.dashboard_session_limit,
       darkMode: Boolean(settings.dark_mode),
     };
@@ -41,6 +54,15 @@ export async function GET() {
 // PUT /api/settings - Update user settings
 export async function PUT(request: NextRequest) {
   try {
+    const session = await getServerSession(authOptions);
+    if (!session?.user?.id) {
+      return NextResponse.json<ApiResponse<UserSettings>>({
+        success: false,
+        error: 'Unauthorized',
+      }, { status: 401 });
+    }
+
+    const userId = session.user.id;
     const body = await request.json();
     const { dashboardSessionLimit, darkMode }: {
       dashboardSessionLimit?: number;
@@ -50,13 +72,13 @@ export async function PUT(request: NextRequest) {
     const db = getDatabase();
 
     // Check if settings exist
-    const existingSettings = db.prepare('SELECT id FROM user_settings WHERE id = ?').get('default');
+    const existingSettings = db.prepare('SELECT id FROM user_settings WHERE user_id = ?').get(userId);
     if (!existingSettings) {
       // Create default settings first
       db.prepare(`
-        INSERT INTO user_settings (id, dashboard_session_limit, dark_mode)
-        VALUES (?, ?, ?)
-      `).run('default', 5, false);
+        INSERT INTO user_settings (id, user_id, dashboard_session_limit, dark_mode)
+        VALUES (?, ?, ?, ?)
+      `).run(uuidv4(), userId, 5, false);
     }
 
     // Update settings
@@ -86,19 +108,20 @@ export async function PUT(request: NextRequest) {
       }, { status: 400 });
     }
 
-    updateValues.push('default'); // for WHERE clause
+    updateValues.push(userId); // for WHERE clause
 
     db.prepare(`
       UPDATE user_settings
       SET ${updateFields.join(', ')}
-      WHERE id = ?
+      WHERE user_id = ?
     `).run(...updateValues);
 
     // Fetch updated settings
-    const settings = db.prepare('SELECT * FROM user_settings WHERE id = ?').get('default');
+    const settings = db.prepare('SELECT * FROM user_settings WHERE user_id = ?').get(userId);
 
     const responseSettings: UserSettings = {
       id: settings.id,
+      userId: settings.user_id,
       dashboardSessionLimit: settings.dashboard_session_limit,
       darkMode: Boolean(settings.dark_mode),
     };

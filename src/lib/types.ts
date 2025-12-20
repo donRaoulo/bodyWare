@@ -2,6 +2,7 @@ export type ExerciseType = 'strength' | 'cardio' | 'endurance' | 'stretch';
 
 export interface Exercise {
   id: string;
+  userId?: string | null;
   name: string;
   type: ExerciseType;
   createdAt: Date;
@@ -10,6 +11,7 @@ export interface Exercise {
 
 export interface WorkoutTemplate {
   id: string;
+  userId: string;
   name: string;
   exerciseIds: string[];
   createdAt: Date;
@@ -18,6 +20,7 @@ export interface WorkoutTemplate {
 
 export interface WorkoutSession {
   id: string;
+  userId: string;
   templateId: string;
   templateName: string;
   date: Date;
@@ -52,6 +55,7 @@ export interface ExerciseSession {
 
 export interface BodyMeasurement {
   id: string;
+  userId: string;
   date: Date;
   weight?: number; // kg
   chest?: number; // cm
@@ -65,6 +69,7 @@ export interface BodyMeasurement {
 
 export interface UserSettings {
   id: string;
+  userId: string;
   dashboardSessionLimit: number;
   darkMode: boolean;
 }

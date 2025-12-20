@@ -2,10 +2,21 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getDatabase, parseJson, stringifyJson } from '../../../lib/database';
 import { WorkoutSession, ExerciseSession, ApiResponse } from '../../../lib/types';
 import { v4 as uuidv4 } from 'uuid';
+import { getServerSession } from 'next-auth/next';
+import { authOptions } from '../../../lib/auth';
 
 // GET /api/sessions - Fetch workout sessions
 export async function GET(request: NextRequest) {
   try {
+    const session = await getServerSession(authOptions);
+    if (!session?.user?.id) {
+      return NextResponse.json<ApiResponse<WorkoutSession[]>>({
+        success: false,
+        error: 'Unauthorized',
+      }, { status: 401 });
+    }
+
+    const userId = session.user.id;
     const db = getDatabase();
     const { searchParams } = new URL(request.url);
     const limit = parseInt(searchParams.get('limit') || '10');
@@ -13,10 +24,12 @@ export async function GET(request: NextRequest) {
 
     const sessions = db.prepare(`
       SELECT * FROM workout_sessions
+      WHERE user_id = ?
       ORDER BY date DESC
       LIMIT ? OFFSET ?
-    `).all(limit, offset).map((row: any) => ({
+    `).all(userId, limit, offset).map((row: any) => ({
       id: row.id,
+      userId: row.user_id,
       templateId: row.template_id,
       templateName: row.template_name,
       date: new Date(row.date),
@@ -27,9 +40,9 @@ export async function GET(request: NextRequest) {
     for (const session of sessions) {
       const exerciseSessions = db.prepare(`
         SELECT * FROM exercise_sessions
-        WHERE workout_session_id = ?
+        WHERE workout_session_id = ? AND user_id = ?
         ORDER BY id
-      `).all(session.id).map((row: any) => {
+      `).all(session.id, userId).map((row: any) => {
         const exerciseSession: ExerciseSession = {
           exerciseId: row.exercise_id,
           exerciseName: row.exercise_name,
@@ -72,6 +85,15 @@ export async function GET(request: NextRequest) {
 // POST /api/sessions - Create new workout session
 export async function POST(request: NextRequest) {
   try {
+    const session = await getServerSession(authOptions);
+    if (!session?.user?.id) {
+      return NextResponse.json<ApiResponse<WorkoutSession>>({
+        success: false,
+        error: 'Unauthorized',
+      }, { status: 401 });
+    }
+
+    const userId = session.user.id;
     const body = await request.json();
     const { templateId, templateName, date, exercises }: {
       templateId: string;
@@ -100,21 +122,22 @@ export async function POST(request: NextRequest) {
 
     // Insert workout session
     db.prepare(`
-      INSERT INTO workout_sessions (id, template_id, template_name, date, created_at)
-      VALUES (?, ?, ?, ?, ?)
-    `).run(sessionId, templateId, templateName, date, now);
+      INSERT INTO workout_sessions (id, user_id, template_id, template_name, date, created_at)
+      VALUES (?, ?, ?, ?, ?, ?)
+    `).run(sessionId, userId, templateId, templateName, date, now);
 
     // Insert exercise sessions
     const insertExerciseSession = db.prepare(`
       INSERT INTO exercise_sessions (
-        id, workout_session_id, exercise_id, exercise_name, type,
+        id, user_id, workout_session_id, exercise_id, exercise_name, type,
         strength_data, cardio_data, endurance_data, stretch_data
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `);
 
     exercises.forEach((exercise) => {
       insertExerciseSession.run(
         uuidv4(),
+        userId,
         sessionId,
         exercise.exerciseId,
         exercise.exerciseName,
@@ -127,14 +150,15 @@ export async function POST(request: NextRequest) {
     });
 
     // Fetch created session with exercises
-    const session = db.prepare('SELECT * FROM workout_sessions WHERE id = ?').get(sessionId);
+    const sessionRow = db.prepare('SELECT * FROM workout_sessions WHERE id = ? AND user_id = ?').get(sessionId, userId);
 
     const responseSession: WorkoutSession = {
-      id: session.id,
-      templateId: session.template_id,
-      templateName: session.template_name,
-      date: new Date(session.date),
-      createdAt: new Date(session.created_at),
+      id: sessionRow.id,
+      userId: sessionRow.user_id,
+      templateId: sessionRow.template_id,
+      templateName: sessionRow.template_name,
+      date: new Date(sessionRow.date),
+      createdAt: new Date(sessionRow.created_at),
       exercises,
     };
 

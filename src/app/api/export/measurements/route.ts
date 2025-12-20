@@ -1,17 +1,26 @@
 import { NextResponse } from 'next/server';
 import { getDatabase } from '../../../../lib/database';
 import { format } from 'date-fns';
+import { getServerSession } from 'next-auth/next';
+import { authOptions } from '../../../../lib/auth';
 
 // GET /api/export/measurements - Export body measurements as CSV
 export async function GET() {
   try {
+    const session = await getServerSession(authOptions);
+    if (!session?.user?.id) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+
+    const userId = session.user.id;
     const db = getDatabase();
 
     // Fetch all body measurements
     const measurements = db.prepare(`
       SELECT * FROM body_measurements
+      WHERE user_id = ?
       ORDER BY date DESC
-    `).all();
+    `).all(userId);
 
     if (measurements.length === 0) {
       return new Response('No measurements to export', { status: 404 });

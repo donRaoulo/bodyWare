@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getDatabase } from '../../../../lib/database';
 import { BodyMeasurement, ApiResponse } from '../../../../lib/types';
+import { getServerSession } from 'next-auth/next';
+import { authOptions } from '../../../../lib/auth';
 
 // GET /api/measurements/[id] - Fetch specific measurement
 export async function GET(
@@ -8,10 +10,19 @@ export async function GET(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const session = await getServerSession(authOptions);
+    if (!session?.user?.id) {
+      return NextResponse.json<ApiResponse<BodyMeasurement>>({
+        success: false,
+        error: 'Unauthorized',
+      }, { status: 401 });
+    }
+
+    const userId = session.user.id;
     const { id } = await params;
     const db = getDatabase();
 
-    const measurement = db.prepare('SELECT * FROM body_measurements WHERE id = ?').get(id);
+    const measurement = db.prepare('SELECT * FROM body_measurements WHERE id = ? AND user_id = ?').get(id, userId);
 
     if (!measurement) {
       return NextResponse.json<ApiResponse<BodyMeasurement>>({
@@ -22,6 +33,7 @@ export async function GET(
 
     const responseMeasurement: BodyMeasurement = {
       id: measurement.id,
+      userId: measurement.user_id,
       date: new Date(measurement.date),
       weight: measurement.weight || undefined,
       chest: measurement.chest || undefined,
@@ -52,11 +64,20 @@ export async function DELETE(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const session = await getServerSession(authOptions);
+    if (!session?.user?.id) {
+      return NextResponse.json<ApiResponse<null>>({
+        success: false,
+        error: 'Unauthorized',
+      }, { status: 401 });
+    }
+
+    const userId = session.user.id;
     const { id } = await params;
     const db = getDatabase();
 
     // Check if measurement exists
-    const existingMeasurement = db.prepare('SELECT id FROM body_measurements WHERE id = ?').get(id);
+    const existingMeasurement = db.prepare('SELECT id FROM body_measurements WHERE id = ? AND user_id = ?').get(id, userId);
     if (!existingMeasurement) {
       return NextResponse.json<ApiResponse<null>>({
         success: false,
@@ -65,7 +86,7 @@ export async function DELETE(
     }
 
     // Delete measurement
-    db.prepare('DELETE FROM body_measurements WHERE id = ?').run(id);
+    db.prepare('DELETE FROM body_measurements WHERE id = ? AND user_id = ?').run(id, userId);
 
     return NextResponse.json<ApiResponse<null>>({
       success: true,

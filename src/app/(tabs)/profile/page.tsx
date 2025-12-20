@@ -27,7 +27,8 @@ import { useTheme } from '../../../components/ThemeProvider';
 export default function ProfilePage() {
   const { mode, toggleColorMode } = useTheme();
   const [settings, setSettings] = useState<UserSettings>({
-    id: 'default',
+    id: '',
+    userId: '',
     dashboardSessionLimit: 5,
     darkMode: false,
   });

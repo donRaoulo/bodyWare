@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getDatabase } from '../../../../lib/database';
 import { WorkoutTemplate, ApiResponse } from '../../../../lib/types';
 import { v4 as uuidv4 } from 'uuid';
+import { getServerSession } from 'next-auth/next';
+import { authOptions } from '../../../../lib/auth';
 
 // GET /api/templates/[id] - Fetch specific template
 export async function GET(
@@ -9,6 +11,15 @@ export async function GET(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const session = await getServerSession(authOptions);
+    if (!session?.user?.id) {
+      return NextResponse.json<ApiResponse<WorkoutTemplate>>({
+        success: false,
+        error: 'Unauthorized',
+      }, { status: 401 });
+    }
+
+    const userId = session.user.id;
     const { id } = await params;
     const db = getDatabase();
 
@@ -17,10 +28,10 @@ export async function GET(
         wt.*,
         GROUP_CONCAT(te.exercise_id) as exercise_ids
       FROM workout_templates wt
-      LEFT JOIN template_exercises te ON wt.id = te.template_id
-      WHERE wt.id = ?
+      LEFT JOIN template_exercises te ON wt.id = te.template_id AND te.user_id = wt.user_id
+      WHERE wt.id = ? AND wt.user_id = ?
       GROUP BY wt.id
-    `).get(id);
+    `).get(id, userId);
 
     if (!template) {
       return NextResponse.json<ApiResponse<WorkoutTemplate>>({
@@ -31,6 +42,7 @@ export async function GET(
 
     const responseTemplate: WorkoutTemplate = {
       id: template.id,
+      userId: template.user_id,
       name: template.name,
       exerciseIds: template.exercise_ids ? template.exercise_ids.split(',') : [],
       createdAt: new Date(template.created_at),
@@ -56,6 +68,15 @@ export async function PUT(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const session = await getServerSession(authOptions);
+    if (!session?.user?.id) {
+      return NextResponse.json<ApiResponse<WorkoutTemplate>>({
+        success: false,
+        error: 'Unauthorized',
+      }, { status: 401 });
+    }
+
+    const userId = session.user.id;
     const { id } = await params;
     const body = await request.json();
     const { name, exerciseIds }: { name: string; exerciseIds: string[] } = body;
@@ -84,7 +105,7 @@ export async function PUT(
     const db = getDatabase();
 
     // Check if template exists
-    const existingTemplate = db.prepare('SELECT id FROM workout_templates WHERE id = ?').get(id);
+    const existingTemplate = db.prepare('SELECT id FROM workout_templates WHERE id = ? AND user_id = ?').get(id, userId);
     if (!existingTemplate) {
       return NextResponse.json<ApiResponse<WorkoutTemplate>>({
         success: false,
@@ -98,20 +119,20 @@ export async function PUT(
     db.prepare(`
       UPDATE workout_templates
       SET name = ?, updated_at = ?
-      WHERE id = ?
-    `).run(name.trim(), now, id);
+      WHERE id = ? AND user_id = ?
+    `).run(name.trim(), now, id, userId);
 
     // Remove existing exercise associations
-    db.prepare('DELETE FROM template_exercises WHERE template_id = ?').run(id);
+    db.prepare('DELETE FROM template_exercises WHERE template_id = ? AND user_id = ?').run(id, userId);
 
     // Insert new exercise associations
     const insertExercise = db.prepare(`
-      INSERT INTO template_exercises (id, template_id, exercise_id, order_index)
-      VALUES (?, ?, ?, ?)
+      INSERT INTO template_exercises (id, user_id, template_id, exercise_id, order_index)
+      VALUES (?, ?, ?, ?, ?)
     `);
 
     exerciseIds.forEach((exerciseId, index) => {
-      insertExercise.run(uuidv4(), id, exerciseId, index);
+      insertExercise.run(uuidv4(), userId, id, exerciseId, index);
     });
 
     // Fetch updated template with exercises
@@ -120,13 +141,14 @@ export async function PUT(
         wt.*,
         GROUP_CONCAT(te.exercise_id) as exercise_ids
       FROM workout_templates wt
-      LEFT JOIN template_exercises te ON wt.id = te.template_id
-      WHERE wt.id = ?
+      LEFT JOIN template_exercises te ON wt.id = te.template_id AND te.user_id = wt.user_id
+      WHERE wt.id = ? AND wt.user_id = ?
       GROUP BY wt.id
-    `).get(id);
+    `).get(id, userId);
 
     const responseTemplate: WorkoutTemplate = {
       id: template.id,
+      userId: template.user_id,
       name: template.name,
       exerciseIds: template.exercise_ids ? template.exercise_ids.split(',') : [],
       createdAt: new Date(template.created_at),
@@ -152,11 +174,20 @@ export async function DELETE(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const session = await getServerSession(authOptions);
+    if (!session?.user?.id) {
+      return NextResponse.json<ApiResponse<null>>({
+        success: false,
+        error: 'Unauthorized',
+      }, { status: 401 });
+    }
+
+    const userId = session.user.id;
     const { id } = await params;
     const db = getDatabase();
 
     // Check if template exists
-    const existingTemplate = db.prepare('SELECT id FROM workout_templates WHERE id = ?').get(id);
+    const existingTemplate = db.prepare('SELECT id FROM workout_templates WHERE id = ? AND user_id = ?').get(id, userId);
     if (!existingTemplate) {
       return NextResponse.json<ApiResponse<null>>({
         success: false,
@@ -165,7 +196,7 @@ export async function DELETE(
     }
 
     // Delete template (cascades to template_exercises)
-    db.prepare('DELETE FROM workout_templates WHERE id = ?').run(id);
+    db.prepare('DELETE FROM workout_templates WHERE id = ? AND user_id = ?').run(id, userId);
 
     return NextResponse.json<ApiResponse<null>>({
       success: true,
