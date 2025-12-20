@@ -107,12 +107,12 @@ export default function ProfilePage() {
     saveSettings({ darkMode: nextDark });
   };
 
-  const handleSessionLimitChange = (event: Event, newValue: number | number[]) => {
+  const handleSessionLimitChange = (event: Event | React.SyntheticEvent, newValue: number | number[]) => {
     const limit = Array.isArray(newValue) ? newValue[0] : newValue;
     setSettings(prev => ({ ...prev, dashboardSessionLimit: limit }));
   };
 
-  const handleSessionLimitChangeCommitted = (event: React.SyntheticEvent, newValue: number | number[]) => {
+  const handleSessionLimitChangeCommitted = (event: Event | React.SyntheticEvent, newValue: number | number[]) => {
     const limit = Array.isArray(newValue) ? newValue[0] : newValue;
     saveSettings({ dashboardSessionLimit: limit });
   };

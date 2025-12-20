@@ -61,16 +61,16 @@ export async function GET(request: NextRequest) {
         };
 
         if (row.strength_data) {
-          exerciseSession.strength = parseJson(row.strength_data);
+          exerciseSession.strength = parseJson<{ sets: { weight: number; reps: number }[] }>(row.strength_data) || undefined;
         }
         if (row.cardio_data) {
-          exerciseSession.cardio = parseJson(row.cardio_data);
+          exerciseSession.cardio = parseJson<{ time: number; level: number; distance: number }>(row.cardio_data) || undefined;
         }
         if (row.endurance_data) {
-          exerciseSession.endurance = parseJson(row.endurance_data);
+          exerciseSession.endurance = parseJson<{ time: number; distance: number; pace: number }>(row.endurance_data) || undefined;
         }
         if (row.stretch_data) {
-          exerciseSession.stretch = parseJson(row.stretch_data);
+          exerciseSession.stretch = parseJson<{ completed: boolean }>(row.stretch_data) || undefined;
         }
 
         return exerciseSession;

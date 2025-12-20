@@ -18,7 +18,7 @@ import {
   FormControlLabel,
   Checkbox,
 } from '@mui/material';
-import { Exercise, WorkoutTemplate } from '../../lib/types';
+import type { Exercise, WorkoutTemplate, WorkoutSession, ExerciseSession } from '../../lib/types';
 import { Add as AddIcon, Delete as DeleteIcon } from '@mui/icons-material';
 
 export default function StartWorkoutPage() {

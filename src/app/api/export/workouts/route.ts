@@ -69,28 +69,36 @@ export async function GET() {
         // Format exercise details based on type
         switch (exercise.type) {
           case 'strength': {
-            const strengthData = parseJson(exercise.strength_data);
-            if (strengthData?.sets?.length > 0) {
-              details = strengthData.sets.map((set: any) => `${set.weight}kg x ${set.reps}`).join(', ');
+            const strengthData = parseJson<{ sets?: Array<{ weight?: number; reps?: number }> }>(
+              exercise.strength_data
+            );
+            if (Array.isArray(strengthData?.sets) && strengthData.sets.length > 0) {
+              details = strengthData.sets
+                .map((set) => `${set.weight ?? 0}kg x ${set.reps ?? 0}`)
+                .join(', ');
             }
             break;
           }
           case 'cardio': {
-            const cardioData = parseJson(exercise.cardio_data);
+            const cardioData = parseJson<{ time?: number; level?: number; distance?: number }>(
+              exercise.cardio_data
+            );
             if (cardioData) {
-              details = `${cardioData.time}min, Level ${cardioData.level}, ${cardioData.distance}km`;
+              details = `${cardioData.time ?? 0}min, Level ${cardioData.level ?? 0}, ${cardioData.distance ?? 0}km`;
             }
             break;
           }
           case 'endurance': {
-            const enduranceData = parseJson(exercise.endurance_data);
+            const enduranceData = parseJson<{ time?: number; distance?: number; pace?: number }>(
+              exercise.endurance_data
+            );
             if (enduranceData) {
-              details = `${enduranceData.time}min, ${enduranceData.distance}km, ${enduranceData.pace}min/km`;
+              details = `${enduranceData.time ?? 0}min, ${enduranceData.distance ?? 0}km, ${enduranceData.pace ?? 0}min/km`;
             }
             break;
           }
           case 'stretch': {
-            const stretchData = parseJson(exercise.stretch_data);
+            const stretchData = parseJson<{ completed?: boolean }>(exercise.stretch_data);
             if (stretchData) {
               details = stretchData.completed ? 'Completed' : 'Not completed';
             }

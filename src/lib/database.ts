@@ -1,4 +1,4 @@
-import { Pool, QueryResult } from 'pg';
+import { Pool, QueryResult, QueryResultRow } from 'pg';
 import { DEFAULT_EXERCISES } from './types';
 import { v4 as uuidv4 } from 'uuid';
 
@@ -221,7 +221,7 @@ async function seedDefaultData() {
   }
 }
 
-export async function query<T = any>(text: string, params?: any[]): Promise<QueryResult<T>> {
+export async function query<T extends QueryResultRow = QueryResultRow>(text: string, params?: any[]): Promise<QueryResult<T>> {
   await initDatabase();
   return pool.query<T>(text, params);
 }
