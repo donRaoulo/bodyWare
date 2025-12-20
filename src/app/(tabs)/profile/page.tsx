@@ -126,7 +126,7 @@ export default function ProfilePage() {
       const url = window.URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
-      a.download = `fitflex-workouts-${new Date().toISOString().split('T')[0]}.csv`;
+      a.download = `bodyware-workouts-${new Date().toISOString().split('T')[0]}.csv`;
       document.body.appendChild(a);
       a.click();
       window.URL.revokeObjectURL(url);
@@ -145,7 +145,7 @@ export default function ProfilePage() {
       const url = window.URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
-      a.download = `fitflex-measurements-${new Date().toISOString().split('T')[0]}.csv`;
+      a.download = `bodyware-measurements-${new Date().toISOString().split('T')[0]}.csv`;
       document.body.appendChild(a);
       a.click();
       window.URL.revokeObjectURL(url);
@@ -222,7 +222,7 @@ export default function ProfilePage() {
               <Divider sx={{ my: 2 }} />
 
               <Typography variant="body2" color="text.secondary">
-                Track your workouts, monitor your progress, and achieve your fitness goals with FitFlex.
+                Track your workouts, monitor your progress, and achieve your fitness goals with BodyWare.
               </Typography>
             </CardContent>
           </Card>
@@ -377,13 +377,13 @@ export default function ProfilePage() {
             <CardContent>
               <Box sx={{ display: 'flex', alignItems: 'center', mb: 3 }}>
                 <InfoIcon color="primary" sx={{ mr: 2, fontSize: 32 }} />
-                <Typography variant="h6">About FitFlex</Typography>
+                <Typography variant="h6">About BodyWare</Typography>
               </Box>
 
               <Box sx={{ display: "flex", flexDirection: { xs: "column", md: "row" }, gap: 3 }}>
                 <Box sx={{ flex: 1 }}>
                   <Typography variant="body1" paragraph>
-                    FitFlex is your personal fitness companion, designed to help you track workouts,
+                    BodyWare is your personal fitness companion, designed to help you track workouts,
                     monitor body measurements, and achieve your health goals.
                   </Typography>
                   <Typography variant="body2" color="text.secondary" paragraph>

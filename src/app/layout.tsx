@@ -14,7 +14,7 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "FitFlex - Fitness Tracker",
+  title: "BodyWare - Fitness Tracker",
   description: "Cross-platform fitness tracking app with workout templates and body measurements",
 };
 

@@ -31,11 +31,11 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     // Load theme preference from localStorage
-    const savedMode = localStorage.getItem('fitflex-theme') as ThemeMode;
+    const savedMode = localStorage.getItem('bodyware-theme') as ThemeMode;
     if (savedMode && (savedMode === 'light' || savedMode === 'dark')) {
       setMode(savedMode);
     }
-    const savedColor = localStorage.getItem('fitflex-primary');
+    const savedColor = localStorage.getItem('bodyware-primary');
     if (savedColor) {
       setPrimaryColorState(savedColor);
     }
@@ -52,7 +52,7 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
         const color = data?.data?.primaryColor;
         if (typeof color === 'string' && color.startsWith('#') && color.length >= 4) {
           setPrimaryColorState(color);
-          localStorage.setItem('fitflex-primary', color);
+          localStorage.setItem('bodyware-primary', color);
         }
       } catch {
         // ignore
@@ -64,12 +64,12 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
   const toggleColorMode = () => {
     const newMode = mode === 'light' ? 'dark' : 'light';
     setMode(newMode);
-    localStorage.setItem('fitflex-theme', newMode);
+    localStorage.setItem('bodyware-theme', newMode);
   };
 
   const setPrimaryColor = (color: string) => {
     setPrimaryColorState(color);
-    localStorage.setItem('fitflex-primary', color);
+    localStorage.setItem('bodyware-primary', color);
   };
 
   const theme = useMemo(() => {

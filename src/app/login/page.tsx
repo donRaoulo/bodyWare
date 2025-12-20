@@ -53,7 +53,7 @@ export default function LoginPage() {
             Anmelden
           </Typography>
           <Typography variant="body2" color="text.secondary" gutterBottom>
-            Melde dich an, um deine FitFlex-Daten zu sehen.
+            Melde dich an, um deine BodyWare-Daten zu sehen.
           </Typography>
 
           {error && (

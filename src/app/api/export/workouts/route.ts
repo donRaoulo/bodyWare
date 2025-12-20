@@ -117,7 +117,7 @@ export async function GET() {
     }
 
     // Create filename with current date
-    const filename = `fitflex-workouts-${format(new Date(), 'yyyy-MM-dd')}.csv`;
+    const filename = `bodyware-workouts-${format(new Date(), 'yyyy-MM-dd')}.csv`;
 
     return new NextResponse(csvContent, {
       headers: {

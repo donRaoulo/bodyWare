@@ -137,7 +137,7 @@ export function AppNavigation() {
       <AppBar position="fixed" sx={{ zIndex: theme.zIndex.drawer + 1 }}>
         <Toolbar>
           <Typography variant="h6" noWrap component="div" sx={{ flexGrow: 1 }}>
-            FitFlex
+            BodyWare
           </Typography>
           <Box sx={{ display: 'flex', gap: 1 }}>
             {navigationItems.map((item) => {

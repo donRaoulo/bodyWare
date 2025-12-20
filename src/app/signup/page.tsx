@@ -68,7 +68,7 @@ export default function SignupPage() {
             Registrieren
           </Typography>
           <Typography variant="body2" color="text.secondary" gutterBottom>
-            Erstelle dein Konto, um FitFlex zu nutzen.
+            Erstelle dein Konto, um BodyWare zu nutzen.
           </Typography>
 
           {error && (

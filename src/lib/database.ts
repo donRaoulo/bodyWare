@@ -2,7 +2,7 @@ import { Pool, QueryResult, QueryResultRow } from 'pg';
 import { DEFAULT_EXERCISES } from './types';
 import { v4 as uuidv4 } from 'uuid';
 
-const connectionString = process.env.DATABASE_URL || 'postgres://fitflex:fitflex@localhost:5432/fitflex';
+const connectionString = process.env.DATABASE_URL || 'postgres://bodyware:bodyware@localhost:5432/bodyware';
 
 export const pool = new Pool({ connectionString });
 
