@@ -3,7 +3,7 @@ This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-
 ## docer container start/build
 achtung db und web container werden gelöscht
 ```bash
-docker compose up --build
+docker compose up --build -d
 ```
 Nur den webcontainer neu bauen
 ```bash
