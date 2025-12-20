@@ -129,10 +129,11 @@ export default function BodyPage() {
         </Typography>
         <Button
           variant="contained"
+          size="small"
           startIcon={<AddIcon />}
           href="/measurements/create"
         >
-          Add Measurement
+          Add
         </Button>
       </Box>
 
@@ -146,30 +147,30 @@ export default function BodyPage() {
         {/* Current Measurements */}
         <Box sx={{ flex: 1 }}>
           <Card>
-            <CardContent>
-              <Box sx={{ display: 'flex', alignItems: 'center', mb: 3 }}>
+            <CardContent sx={{ p: 2 }}>
+              <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
                 <TrendingIcon color="primary" sx={{ mr: 1 }} />
-                <Typography variant="h6">Current Measurements</Typography>
+                <Typography variant="subtitle1" fontWeight={600}>Current Measurements</Typography>
               </Box>
 
               {currentMeasurement ? (
                 <Box>
-                  <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+                  <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
                     Last measured: {format(new Date(currentMeasurement.date), 'MMM d, yyyy')}
                   </Typography>
-                  <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 2 }}>
+                  <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1 }}>
                     {measurementFields.map((field) => {
                       const value = currentMeasurement[field.key as keyof BodyMeasurement] as number | undefined;
                       return (
-                        <Box sx={{ flex: { xs: '1 1 calc(50% - 8px)', sm: '1 1 calc(33.333% - 8px)' }, minWidth: 100 }} key={field.key}>
-                          <Box sx={{ textAlign: 'center', p: 1 }}>
+                        <Box sx={{ flex: { xs: '1 1 calc(50% - 6px)', sm: '1 1 calc(33.333% - 6px)' }, minWidth: 100 }} key={field.key}>
+                          <Box sx={{ textAlign: 'center', p: 0.5 }}>
                             <Box sx={{ display: 'flex', justifyContent: 'center', mb: 0.5 }}>
                               {field.icon}
                             </Box>
                             <Typography variant="body2" color="text.secondary">
                               {field.label}
                             </Typography>
-                            <Typography variant="h6">
+                            <Typography variant="body1" fontWeight={600}>
                               {getMeasurementValue(value)}
                             </Typography>
                             <Typography variant="caption" color="text.secondary">
@@ -182,20 +183,21 @@ export default function BodyPage() {
                   </Box>
                 </Box>
               ) : (
-                <Box sx={{ textAlign: 'center', py: 4 }}>
-                  <WeightIcon sx={{ fontSize: 48, color: 'text.secondary', mb: 2 }} />
-                  <Typography variant="h6" color="text.secondary" gutterBottom>
+                <Box sx={{ textAlign: 'center', py: 3 }}>
+                  <WeightIcon sx={{ fontSize: 40, color: 'text.secondary', mb: 1 }} />
+                  <Typography variant="subtitle1" color="text.secondary" gutterBottom>
                     No measurements yet
                   </Typography>
-                  <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
+                  <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
                     Track your body measurements to monitor your fitness progress.
                   </Typography>
                   <Button
                     variant="contained"
+                    size="small"
                     startIcon={<AddIcon />}
                     href="/measurements/create"
                   >
-                    Add First Measurement
+                    Add
                   </Button>
                 </Box>
               )}

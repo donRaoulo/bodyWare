@@ -16,6 +16,7 @@ export interface WorkoutTemplate {
   exerciseIds: string[];
   createdAt: Date;
   updatedAt: Date;
+  lastUsedAt?: Date;
 }
 
 export interface WorkoutSession {

@@ -23,9 +23,12 @@ import {
 } from '@mui/icons-material';
 import { UserSettings } from '../../../lib/types';
 import { useTheme } from '../../../components/ThemeProvider';
+import { useSession } from 'next-auth/react';
+import { signOut } from 'next-auth/react';
 
 export default function ProfilePage() {
   const { mode, toggleColorMode } = useTheme();
+  const { data: session } = useSession();
   const [settings, setSettings] = useState<UserSettings>({
     id: '',
     userId: '',
@@ -39,13 +42,6 @@ export default function ProfilePage() {
   useEffect(() => {
     fetchSettings();
   }, []);
-
-  useEffect(() => {
-    // Sync theme mode with settings
-    if (settings.darkMode !== (mode === 'dark')) {
-      handleThemeToggle();
-    }
-  }, [settings.darkMode]);
 
   const fetchSettings = async () => {
     try {
@@ -92,9 +88,13 @@ export default function ProfilePage() {
     }
   };
 
-  const handleThemeToggle = () => {
-    toggleColorMode();
-    saveSettings({ darkMode: mode !== 'dark' });
+  const handleThemeToggle = (nextDark: boolean) => {
+    // Only toggle theme if the desired state differs from current mode
+    const currentlyDark = mode === 'dark';
+    if (nextDark !== currentlyDark) {
+      toggleColorMode();
+    }
+    saveSettings({ darkMode: nextDark });
   };
 
   const handleSessionLimitChange = (event: Event, newValue: number | number[]) => {
@@ -190,10 +190,23 @@ export default function ProfilePage() {
                 >
                   <PersonIcon sx={{ fontSize: 40, color: 'white' }} />
                 </Box>
-                <Typography variant="h6">Fitness Enthusiast</Typography>
-                <Typography variant="body2" color="text.secondary">
-                  Your personal fitness journey
+                <Typography variant="h6">
+                  {session?.user?.name || 'Fitness Enthusiast'}
                 </Typography>
+                {session?.user?.email && (
+                  <Typography variant="body2" color="text.secondary">
+                    {session.user.email}
+                  </Typography>
+                )}
+                <Box sx={{ mt: 2 }}>
+                  <Button
+                    variant="outlined"
+                    size="small"
+                    onClick={() => signOut({ callbackUrl: '/login' })}
+                  >
+                    Logout
+                  </Button>
+                </Box>
               </Box>
 
               <Divider sx={{ my: 2 }} />
@@ -220,7 +233,7 @@ export default function ProfilePage() {
                   control={
                     <Switch
                       checked={mode === 'dark'}
-                      onChange={handleThemeToggle}
+                      onChange={(e) => handleThemeToggle(e.target.checked)}
                       color="primary"
                     />
                   }

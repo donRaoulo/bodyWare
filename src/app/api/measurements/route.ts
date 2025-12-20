@@ -22,7 +22,7 @@ export async function GET() {
       `
       SELECT * FROM body_measurements
       WHERE user_id = $1
-      ORDER BY date DESC
+      ORDER BY created_at DESC, date DESC
     `,
       [userId]
     );

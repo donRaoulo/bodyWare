@@ -22,7 +22,12 @@ export async function GET() {
       `
       SELECT
         wt.*,
-        STRING_AGG(te.exercise_id, ',') AS exercise_ids
+        STRING_AGG(te.exercise_id, ',') AS exercise_ids,
+        (
+          SELECT MAX(ws.date)
+          FROM workout_sessions ws
+          WHERE ws.template_id = wt.id AND ws.user_id = wt.user_id
+        ) AS last_used_at
       FROM workout_templates wt
       LEFT JOIN template_exercises te ON wt.id = te.template_id AND te.user_id = wt.user_id
       WHERE wt.user_id = $1
@@ -39,6 +44,7 @@ export async function GET() {
       exerciseIds: row.exercise_ids ? row.exercise_ids.split(',') : [],
       createdAt: new Date(row.created_at),
       updatedAt: new Date(row.updated_at),
+      lastUsedAt: row.last_used_at ? new Date(row.last_used_at) : undefined,
     })) as WorkoutTemplate[];
 
     return NextResponse.json<ApiResponse<WorkoutTemplate[]>>({

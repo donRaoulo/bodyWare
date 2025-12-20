@@ -7,7 +7,6 @@ import {
   CardContent,
   Typography,
   Button,
-  Grid,
   Chip,
   CircularProgress,
   Alert,
@@ -30,6 +29,7 @@ import {
 import { WorkoutTemplate, Exercise } from '../../../lib/types';
 import Link from 'next/link';
 import { format } from 'date-fns';
+import { Stack } from '@mui/material';
 
 export default function TrainingsPage() {
   const [templates, setTemplates] = useState<WorkoutTemplate[]>([]);
@@ -92,6 +92,7 @@ export default function TrainingsPage() {
     if (!selectedTemplate) return;
 
     try {
+      setLoading(true);
       const response = await fetch(`/api/templates/${selectedTemplate.id}`, {
         method: 'DELETE',
       });
@@ -105,6 +106,7 @@ export default function TrainingsPage() {
     } finally {
       setDeleteDialogOpen(false);
       setSelectedTemplate(null);
+      setLoading(false);
     }
   };
 
@@ -135,11 +137,12 @@ export default function TrainingsPage() {
         </Typography>
         <Button
           variant="contained"
+          size="small"
           startIcon={<AddIcon />}
           component={Link}
           href="/trainings/create"
         >
-          Create Template
+          New
         </Button>
       </Box>
 
@@ -171,76 +174,76 @@ export default function TrainingsPage() {
           </CardContent>
         </Card>
       ) : (
-        <Grid container spacing={3}>
+        <Stack spacing={2}>
           {templates.map((template) => {
             const exerciseNames = getExerciseNames(template);
             return (
-              <Grid item xs={12} sm={6} lg={4} key={template.id}>
-                <Card sx={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
-                  <CardContent sx={{ flex: 1 }}>
-                    <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', mb: 2 }}>
-                      <Typography variant="h6" component="h2" sx={{ flex: 1 }}>
-                        {template.name}
-                      </Typography>
-                      <IconButton
-                        size="small"
-                        onClick={(e) => handleMenuOpen(e, template)}
-                      >
-                        <MoreIcon />
-                      </IconButton>
-                    </Box>
-
-                    <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-                      {exerciseNames.length} {exerciseNames.length === 1 ? 'exercise' : 'exercises'}
+              <Card key={template.id} sx={{ width: '100%', display: 'flex', flexDirection: 'column' }}>
+                <CardContent sx={{ flex: 1 }}>
+                  <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', mb: 2 }}>
+                    <Typography variant="h6" component="h2" sx={{ flex: 1 }}>
+                      {template.name}
                     </Typography>
-
-                    <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5, mb: 3 }}>
-                      {exerciseNames.slice(0, 3).map((name, index) => (
-                        <Chip
-                          key={index}
-                          label={name}
-                          size="small"
-                          variant="outlined"
-                        />
-                      ))}
-                      {exerciseNames.length > 3 && (
-                        <Chip
-                          label={`+${exerciseNames.length - 3} more`}
-                          size="small"
-                          variant="outlined"
-                        />
-                      )}
-                    </Box>
-
-                    <Typography variant="caption" color="text.secondary">
-                      Created {format(new Date(template.createdAt), 'MMM d, yyyy')}
-                    </Typography>
-                  </CardContent>
-
-                  <Box sx={{ p: 2, pt: 0, display: 'flex', gap: 1 }}>
-                    <Button
-                      variant="contained"
-                      startIcon={<StartIcon />}
-                      component={Link}
-                      href={`/start-workout?templateId=${template.id}`}
-                      sx={{ flex: 1 }}
+                    <IconButton
+                      size="small"
+                      onClick={(e) => handleMenuOpen(e, template)}
                     >
-                      Start
-                    </Button>
-                    <Button
-                      variant="outlined"
-                      startIcon={<EditIcon />}
-                      component={Link}
-                      href={`/trainings/edit/${template.id}`}
-                    >
-                      Edit
-                    </Button>
+                      <MoreIcon />
+                    </IconButton>
                   </Box>
-                </Card>
-              </Grid>
+
+                  <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+                    {exerciseNames.length} {exerciseNames.length === 1 ? 'exercise' : 'exercises'}
+                  </Typography>
+
+                  <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5, mb: 3 }}>
+                    {exerciseNames.slice(0, 3).map((name, index) => (
+                      <Chip
+                        key={index}
+                        label={name}
+                        size="small"
+                        variant="outlined"
+                      />
+                    ))}
+                    {exerciseNames.length > 3 && (
+                      <Chip
+                        label={`+${exerciseNames.length - 3} more`}
+                        size="small"
+                        variant="outlined"
+                      />
+                    )}
+                  </Box>
+
+                  <Typography variant="caption" color="text.secondary">
+                    {template.lastUsedAt
+                      ? `Zuletzt genutzt ${format(new Date(template.lastUsedAt), 'MMM d, yyyy')}`
+                      : `Erstellt ${format(new Date(template.createdAt), 'MMM d, yyyy')}`}
+                  </Typography>
+                </CardContent>
+
+                <Box sx={{ p: 2, pt: 0, display: 'flex', gap: 1 }}>
+                  <Button
+                    variant="contained"
+                    startIcon={<StartIcon />}
+                    component={Link}
+                    href={`/start-workout?templateId=${template.id}`}
+                    sx={{ flex: 1 }}
+                  >
+                    Start
+                  </Button>
+                  <Button
+                    variant="outlined"
+                    startIcon={<EditIcon />}
+                    component={Link}
+                    href={`/trainings/edit/${template.id}`}
+                  >
+                    Edit
+                  </Button>
+                </Box>
+              </Card>
             );
           })}
-        </Grid>
+        </Stack>
       )}
 
       {/* Menu */}

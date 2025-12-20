@@ -60,11 +60,29 @@ export function AppNavigation() {
   const pathname = usePathname();
   const router = useRouter();
   const isMobile = useMediaQuery(theme.breakpoints.down('md'));
+  const isAuthPage = pathname?.startsWith('/login') || pathname?.startsWith('/signup');
 
   // Get current active tab
-  const activeTab = navigationItems.find(item =>
-    pathname === item.href || pathname.startsWith(item.href + '/')
-  )?.id || 'dashboard';
+  const activeTab =
+    navigationItems.find(item =>
+      pathname === item.href || pathname.startsWith(item.href + '/')
+    )?.id
+    // treat start-workout as trainings
+    || (pathname?.startsWith('/start-workout') ? 'trainings' : 'dashboard');
+
+  // Add bottom padding on mobile so content isn't hidden behind bottom nav
+  useEffect(() => {
+    if (!isMobile || isAuthPage) return;
+    const original = document.body.style.paddingBottom;
+    document.body.style.paddingBottom = '72px';
+    return () => {
+      document.body.style.paddingBottom = original;
+    };
+  }, [isMobile, isAuthPage]);
+
+  if (isAuthPage) {
+    return null;
+  }
 
   const handleNavigation = (href: string) => {
     router.push(href);

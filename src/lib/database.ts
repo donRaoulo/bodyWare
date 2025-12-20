@@ -160,6 +160,25 @@ async function createTables() {
       CREATE INDEX IF NOT EXISTS idx_template_exercises_user_order ON template_exercises(user_id, template_id, order_index);
     `);
 
+    // Safe migration: add created_at column if missing (for existing DBs)
+    await client.query(`
+      DO $$
+      BEGIN
+        IF NOT EXISTS (
+          SELECT 1 FROM information_schema.columns
+          WHERE table_name = 'body_measurements' AND column_name = 'created_at'
+        ) THEN
+          ALTER TABLE body_measurements ADD COLUMN created_at TIMESTAMPTZ DEFAULT NOW();
+          CREATE INDEX IF NOT EXISTS idx_body_measurements_user_created ON body_measurements(user_id, created_at DESC);
+        END IF;
+      END$$;
+    `);
+
+    // Ensure index exists when column already present
+    await client.query(`
+      CREATE INDEX IF NOT EXISTS idx_body_measurements_user_created ON body_measurements(user_id, created_at DESC);
+    `);
+
     await client.query('COMMIT');
   } catch (error) {
     await client.query('ROLLBACK');
@@ -194,7 +213,11 @@ export async function query<T = any>(text: string, params?: any[]): Promise<Quer
 }
 
 export function parseJson<T>(jsonString: string | null): T | null {
-  if (!jsonString) return null;
+  if (jsonString === null || jsonString === undefined) return null;
+  // If already parsed (e.g., JSON/JSONB from pg), return as-is
+  if (typeof jsonString === 'object') {
+    return jsonString as unknown as T;
+  }
   try {
     return JSON.parse(jsonString) as T;
   } catch {

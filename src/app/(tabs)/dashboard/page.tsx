@@ -26,7 +26,7 @@ import Link from 'next/link';
 interface DashboardStats {
   totalWorkouts: number;
   thisWeekWorkouts: number;
-  totalExercises: number;
+  totalWeightKg: number;
 }
 
 export default function DashboardPage() {
@@ -34,8 +34,9 @@ export default function DashboardPage() {
   const [stats, setStats] = useState<DashboardStats>({
     totalWorkouts: 0,
     thisWeekWorkouts: 0,
-    totalExercises: 0,
+    totalWeightKg: 0,
   });
+  const [sessionLimit, setSessionLimit] = useState<number>(5);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -48,21 +49,27 @@ export default function DashboardPage() {
       setLoading(true);
       setError(null);
 
-      // Fetch recent sessions
-      const sessionsResponse = await fetch('/api/sessions?limit=5');
-      if (!sessionsResponse.ok) throw new Error('Failed to fetch sessions');
-      const sessionsData = await sessionsResponse.json();
+      // Fetch user settings first to respect session limit
+      const settingsResponse = await fetch('/api/settings');
+      const settingsData = await settingsResponse.json();
+      const limitFromSettings =
+        settingsResponse.ok && settingsData.success && settingsData.data?.dashboardSessionLimit
+          ? settingsData.data.dashboardSessionLimit
+          : 5;
+      setSessionLimit(limitFromSettings);
 
-      if (sessionsData.success) {
+      const [sessionsResponse, statsResponse] = await Promise.all([
+        fetch(`/api/sessions?limit=${limitFromSettings}`),
+        fetch('/api/sessions/stats'),
+      ]);
+
+      const sessionsData = await sessionsResponse.json();
+      if (sessionsResponse.ok && sessionsData.success) {
         setRecentSessions(sessionsData.data);
       }
 
-      // Fetch stats
-      const statsResponse = await fetch('/api/sessions/stats');
-      if (!statsResponse.ok) throw new Error('Failed to fetch stats');
       const statsData = await statsResponse.json();
-
-      if (statsData.success) {
+      if (statsResponse.ok && statsData.success) {
         setStats(statsData.data);
       }
     } catch (err) {
@@ -93,14 +100,6 @@ export default function DashboardPage() {
         <Typography variant="h4" component="h1">
           Dashboard
         </Typography>
-        <Button
-          variant="contained"
-          startIcon={<AddIcon />}
-          component={Link}
-          href="/trainings/create"
-        >
-          New Workout
-        </Button>
       </Box>
 
       {error && (
@@ -144,11 +143,14 @@ export default function DashboardPage() {
             <Box sx={{ display: 'flex', alignItems: 'center', mb: 1 }}>
               <FitnessIcon color="warning" sx={{ mr: 1 }} />
               <Typography variant="h6" component="div">
-                Exercises
+                Total Weight
               </Typography>
             </Box>
             <Typography variant="h4" color="warning.main">
-              {stats.totalExercises}
+              {Math.round(stats.totalWeightKg)}
+              <Typography variant="caption" component="span" sx={{ ml: 0.5 }}>
+                kg (sum)
+              </Typography>
             </Typography>
           </CardContent>
         </Card>

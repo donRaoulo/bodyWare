@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { query } from '../../../../lib/database';
+import { query, parseJson } from '../../../../lib/database';
 import { ApiResponse } from '../../../../lib/types';
 import { getServerSession } from 'next-auth/next';
 import { authOptions } from '../../../../lib/auth';
@@ -7,7 +7,7 @@ import { authOptions } from '../../../../lib/auth';
 interface DashboardStats {
   totalWorkouts: number;
   thisWeekWorkouts: number;
-  totalExercises: number;
+  totalWeightKg: number;
 }
 
 // GET /api/sessions/stats - Fetch dashboard statistics
@@ -45,18 +45,31 @@ export async function GET() {
       [userId, startOfWeek.toISOString(), endOfWeek.toISOString()]
     );
 
-    const totalExercisesResult = await query<{ count: string }>(
+    // Sum all lifted weight across strength exercises (sum of weight*reps per set)
+    const strengthRows = await query<any>(
       `
-      SELECT COUNT(*)::int AS count FROM exercises
-      WHERE user_id = $1 OR (user_id IS NULL AND is_default = true)
+      SELECT strength_data FROM exercise_sessions
+      WHERE user_id = $1 AND strength_data IS NOT NULL
     `,
       [userId]
     );
 
+    let totalWeightKg = 0;
+    for (const row of strengthRows.rows) {
+      const data = parseJson<{ sets?: { weight?: number; reps?: number }[] }>(row.strength_data);
+      if (data?.sets?.length) {
+        for (const set of data.sets) {
+          const w = set.weight ?? 0;
+          const r = set.reps ?? 0;
+          totalWeightKg += w * r;
+        }
+      }
+    }
+
     const stats: DashboardStats = {
       totalWorkouts: parseInt(totalWorkoutsResult.rows[0].count, 10),
       thisWeekWorkouts: parseInt(thisWeekWorkoutsResult.rows[0].count, 10),
-      totalExercises: parseInt(totalExercisesResult.rows[0].count, 10),
+      totalWeightKg,
     };
 
     return NextResponse.json<ApiResponse<DashboardStats>>({

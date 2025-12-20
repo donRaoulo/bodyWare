@@ -20,15 +20,17 @@ export async function GET(request: NextRequest) {
     const { searchParams } = new URL(request.url);
     const limit = parseInt(searchParams.get('limit') || '10');
     const offset = parseInt(searchParams.get('offset') || '0');
+    const templateId = searchParams.get('templateId');
 
     const sessionResult = await query<any>(
       `
       SELECT * FROM workout_sessions
       WHERE user_id = $1
-      ORDER BY date DESC
-      LIMIT $2 OFFSET $3
+      ${templateId ? 'AND template_id = $2' : ''}
+      ORDER BY date DESC, created_at DESC
+      LIMIT ${templateId ? '$3' : '$2'} OFFSET ${templateId ? '$4' : '$3'}
     `,
-      [userId, limit, offset]
+      templateId ? [userId, templateId, limit, offset] : [userId, limit, offset]
     );
 
     const sessions = sessionResult.rows.map((row) => ({

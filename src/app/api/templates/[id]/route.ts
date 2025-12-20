@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { query } from '../../../../lib/database';
+import { query, pool } from '../../../../lib/database';
 import { WorkoutTemplate, ApiResponse } from '../../../../lib/types';
 import { v4 as uuidv4 } from 'uuid';
 import { getServerSession } from 'next-auth/next';
@@ -26,7 +26,12 @@ export async function GET(
       `
       SELECT
         wt.*,
-        STRING_AGG(te.exercise_id, ',') AS exercise_ids
+        STRING_AGG(te.exercise_id, ',') AS exercise_ids,
+        (
+          SELECT MAX(ws.date)
+          FROM workout_sessions ws
+          WHERE ws.template_id = wt.id AND ws.user_id = wt.user_id
+        ) AS last_used_at
       FROM workout_templates wt
       LEFT JOIN template_exercises te ON wt.id = te.template_id AND te.user_id = wt.user_id
       WHERE wt.id = $1 AND wt.user_id = $2
@@ -51,6 +56,7 @@ export async function GET(
       exerciseIds: template.exercise_ids ? template.exercise_ids.split(',') : [],
       createdAt: new Date(template.created_at),
       updatedAt: new Date(template.updated_at),
+      lastUsedAt: template.last_used_at ? new Date(template.last_used_at) : undefined,
     };
 
     return NextResponse.json<ApiResponse<WorkoutTemplate>>({
@@ -212,8 +218,19 @@ export async function DELETE(
       }, { status: 404 });
     }
 
-    // Delete template (cascades to template_exercises)
-    await query('DELETE FROM workout_templates WHERE id = $1 AND user_id = $2', [id, userId]);
+    const client = await pool.connect();
+    try {
+      await client.query('BEGIN');
+      await client.query('DELETE FROM workout_sessions WHERE template_id = $1 AND user_id = $2', [id, userId]);
+      await client.query('DELETE FROM template_exercises WHERE template_id = $1 AND user_id = $2', [id, userId]);
+      await client.query('DELETE FROM workout_templates WHERE id = $1 AND user_id = $2', [id, userId]);
+      await client.query('COMMIT');
+    } catch (e) {
+      await client.query('ROLLBACK');
+      throw e;
+    } finally {
+      client.release();
+    }
 
     return NextResponse.json<ApiResponse<null>>({
       success: true,

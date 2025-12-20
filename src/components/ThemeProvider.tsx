@@ -23,6 +23,7 @@ export function useTheme() {
 
 export function ThemeProvider({ children }: { children: React.ReactNode }) {
   const [mode, setMode] = useState<ThemeMode>('dark');
+  const [mounted, setMounted] = useState(false);
 
   useEffect(() => {
     // Load theme preference from localStorage
@@ -30,6 +31,7 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
     if (savedMode && (savedMode === 'light' || savedMode === 'dark')) {
       setMode(savedMode);
     }
+    setMounted(true);
   }, []);
 
   const toggleColorMode = () => {
@@ -247,6 +249,11 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
       },
     },
   });
+
+  // Avoid hydration mismatches by rendering after mount when theme is known
+  if (!mounted) {
+    return null;
+  }
 
   return (
     <ThemeContext.Provider value={{ mode, toggleColorMode }}>
