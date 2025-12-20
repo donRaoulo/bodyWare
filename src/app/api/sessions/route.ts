@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getDatabase, parseJson, stringifyJson } from '../../../lib/database';
+import { query, parseJson, stringifyJson } from '../../../lib/database';
 import { WorkoutSession, ExerciseSession, ApiResponse } from '../../../lib/types';
 import { v4 as uuidv4 } from 'uuid';
 import { getServerSession } from 'next-auth/next';
@@ -17,17 +17,21 @@ export async function GET(request: NextRequest) {
     }
 
     const userId = session.user.id;
-    const db = getDatabase();
     const { searchParams } = new URL(request.url);
     const limit = parseInt(searchParams.get('limit') || '10');
     const offset = parseInt(searchParams.get('offset') || '0');
 
-    const sessions = db.prepare(`
+    const sessionResult = await query<any>(
+      `
       SELECT * FROM workout_sessions
-      WHERE user_id = ?
+      WHERE user_id = $1
       ORDER BY date DESC
-      LIMIT ? OFFSET ?
-    `).all(userId, limit, offset).map((row: any) => ({
+      LIMIT $2 OFFSET $3
+    `,
+      [userId, limit, offset]
+    );
+
+    const sessions = sessionResult.rows.map((row) => ({
       id: row.id,
       userId: row.user_id,
       templateId: row.template_id,
@@ -37,19 +41,23 @@ export async function GET(request: NextRequest) {
     })) as WorkoutSession[];
 
     // Fetch exercise sessions for each workout session
-    for (const session of sessions) {
-      const exerciseSessions = db.prepare(`
+    for (const sessionItem of sessions) {
+      const exerciseResult = await query<any>(
+        `
         SELECT * FROM exercise_sessions
-        WHERE workout_session_id = ? AND user_id = ?
+        WHERE workout_session_id = $1 AND user_id = $2
         ORDER BY id
-      `).all(session.id, userId).map((row: any) => {
+      `,
+        [sessionItem.id, userId]
+      );
+
+      const exerciseSessions = exerciseResult.rows.map((row) => {
         const exerciseSession: ExerciseSession = {
           exerciseId: row.exercise_id,
           exerciseName: row.exercise_name,
           type: row.type,
         };
 
-        // Parse type-specific data
         if (row.strength_data) {
           exerciseSession.strength = parseJson(row.strength_data);
         }
@@ -66,7 +74,7 @@ export async function GET(request: NextRequest) {
         return exerciseSession;
       });
 
-      session.exercises = exerciseSessions;
+      sessionItem.exercises = exerciseSessions;
     }
 
     return NextResponse.json<ApiResponse<WorkoutSession[]>>({
@@ -116,41 +124,42 @@ export async function POST(request: NextRequest) {
       }, { status: 400 });
     }
 
-    const db = getDatabase();
     const sessionId = uuidv4();
     const now = new Date().toISOString();
 
-    // Insert workout session
-    db.prepare(`
+    await query(
+      `
       INSERT INTO workout_sessions (id, user_id, template_id, template_name, date, created_at)
-      VALUES (?, ?, ?, ?, ?, ?)
-    `).run(sessionId, userId, templateId, templateName, date, now);
+      VALUES ($1, $2, $3, $4, $5, $6)
+    `,
+      [sessionId, userId, templateId, templateName, date, now]
+    );
 
-    // Insert exercise sessions
-    const insertExerciseSession = db.prepare(`
-      INSERT INTO exercise_sessions (
-        id, user_id, workout_session_id, exercise_id, exercise_name, type,
-        strength_data, cardio_data, endurance_data, stretch_data
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `);
-
-    exercises.forEach((exercise) => {
-      insertExerciseSession.run(
-        uuidv4(),
-        userId,
-        sessionId,
-        exercise.exerciseId,
-        exercise.exerciseName,
-        exercise.type,
-        stringifyJson(exercise.strength),
-        stringifyJson(exercise.cardio),
-        stringifyJson(exercise.endurance),
-        stringifyJson(exercise.stretch)
+    for (const exercise of exercises) {
+      await query(
+        `
+        INSERT INTO exercise_sessions (
+          id, user_id, workout_session_id, exercise_id, exercise_name, type,
+          strength_data, cardio_data, endurance_data, stretch_data
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+      `,
+        [
+          uuidv4(),
+          userId,
+          sessionId,
+          exercise.exerciseId,
+          exercise.exerciseName,
+          exercise.type,
+          stringifyJson(exercise.strength),
+          stringifyJson(exercise.cardio),
+          stringifyJson(exercise.endurance),
+          stringifyJson(exercise.stretch),
+        ]
       );
-    });
+    }
 
-    // Fetch created session with exercises
-    const sessionRow = db.prepare('SELECT * FROM workout_sessions WHERE id = ? AND user_id = ?').get(sessionId, userId);
+    const sessionRowResult = await query<any>('SELECT * FROM workout_sessions WHERE id = $1 AND user_id = $2', [sessionId, userId]);
+    const sessionRow = sessionRowResult.rows[0];
 
     const responseSession: WorkoutSession = {
       id: sessionRow.id,

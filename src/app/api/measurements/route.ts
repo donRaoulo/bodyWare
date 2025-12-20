@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getDatabase } from '../../../lib/database';
+import { query } from '../../../lib/database';
 import { BodyMeasurement, ApiResponse } from '../../../lib/types';
 import { v4 as uuidv4 } from 'uuid';
 import { getServerSession } from 'next-auth/next';
@@ -17,13 +17,17 @@ export async function GET() {
     }
 
     const userId = session.user.id;
-    const db = getDatabase();
 
-    const measurements = db.prepare(`
+    const result = await query<any>(
+      `
       SELECT * FROM body_measurements
-      WHERE user_id = ?
+      WHERE user_id = $1
       ORDER BY date DESC
-    `).all(userId).map((row: any) => ({
+    `,
+      [userId]
+    );
+
+    const measurements = result.rows.map((row) => ({
       id: row.id,
       userId: row.user_id,
       date: new Date(row.date),
@@ -84,7 +88,7 @@ export async function POST(request: NextRequest) {
 
     // Validate that at least one measurement is provided
     const hasAnyMeasurement = [weight, chest, waist, hips, upperArm, forearm, thigh, calf]
-      .some(value => value !== undefined && value !== null && !isNaN(value));
+      .some(value => value !== undefined && value !== null && !isNaN(value as any));
 
     if (!hasAnyMeasurement) {
       return NextResponse.json<ApiResponse<BodyMeasurement>>({
@@ -93,30 +97,34 @@ export async function POST(request: NextRequest) {
       }, { status: 400 });
     }
 
-    const db = getDatabase();
     const id = uuidv4();
 
-    // Insert measurement
-    db.prepare(`
+    await query(
+      `
       INSERT INTO body_measurements (
         id, user_id, date, weight, chest, waist, hips, upper_arm, forearm, thigh, calf
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `).run(
-      id,
-      userId,
-      date,
-      weight || null,
-      chest || null,
-      waist || null,
-      hips || null,
-      upperArm || null,
-      forearm || null,
-      thigh || null,
-      calf || null
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+    `,
+      [
+        id,
+        userId,
+        date,
+        weight ?? null,
+        chest ?? null,
+        waist ?? null,
+        hips ?? null,
+        upperArm ?? null,
+        forearm ?? null,
+        thigh ?? null,
+        calf ?? null,
+      ]
     );
 
-    // Fetch created measurement
-    const measurement = db.prepare('SELECT * FROM body_measurements WHERE id = ? AND user_id = ?').get(id, userId);
+    const measurementResult = await query<any>(
+      'SELECT * FROM body_measurements WHERE id = $1 AND user_id = $2',
+      [id, userId]
+    );
+    const measurement = measurementResult.rows[0];
 
     const responseMeasurement: BodyMeasurement = {
       id: measurement.id,

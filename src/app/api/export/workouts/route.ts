@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { getDatabase, parseJson } from '../../../../lib/database';
+import { query, parseJson } from '../../../../lib/database';
 import { format } from 'date-fns';
 import { getServerSession } from 'next-auth/next';
 import { authOptions } from '../../../../lib/auth';
@@ -13,14 +13,17 @@ export async function GET() {
     }
 
     const userId = session.user.id;
-    const db = getDatabase();
 
     // Fetch all workout sessions with exercises
-    const sessions = db.prepare(`
+    const sessionResult = await query<any>(
+      `
       SELECT * FROM workout_sessions
-      WHERE user_id = ?
+      WHERE user_id = $1
       ORDER BY date DESC
-    `).all(userId);
+    `,
+      [userId]
+    );
+    const sessions = sessionResult.rows;
 
     if (sessions.length === 0) {
       return new Response('No workouts to export', { status: 404 });
@@ -39,14 +42,17 @@ export async function GET() {
 
     for (const sessionRow of sessions) {
       // Fetch exercise sessions for this workout
-      const exerciseSessions = db.prepare(`
+      const exerciseResult = await query<any>(
+        `
         SELECT * FROM exercise_sessions
-        WHERE workout_session_id = ? AND user_id = ?
+        WHERE workout_session_id = $1 AND user_id = $2
         ORDER BY id
-      `).all(sessionRow.id, userId);
+      `,
+        [sessionRow.id, userId]
+      );
+      const exerciseSessions = exerciseResult.rows;
 
       if (exerciseSessions.length === 0) {
-        // Add session row even if no exercises
         csvContent += [
           format(new Date(sessionRow.date), 'yyyy-MM-dd'),
           `"${sessionRow.template_name}"`,

@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getDatabase } from '../../../lib/database';
+import { query } from '../../../lib/database';
 import { WorkoutTemplate, ApiResponse } from '../../../lib/types';
 import { v4 as uuidv4 } from 'uuid';
 import { getServerSession } from 'next-auth/next';
@@ -17,18 +17,22 @@ export async function GET() {
     }
 
     const userId = session.user.id;
-    const db = getDatabase();
 
-    const templates = db.prepare(`
+    const { rows } = await query<any>(
+      `
       SELECT
         wt.*,
-        GROUP_CONCAT(te.exercise_id) as exercise_ids
+        STRING_AGG(te.exercise_id, ',') AS exercise_ids
       FROM workout_templates wt
       LEFT JOIN template_exercises te ON wt.id = te.template_id AND te.user_id = wt.user_id
-      WHERE wt.user_id = ?
+      WHERE wt.user_id = $1
       GROUP BY wt.id
       ORDER BY wt.updated_at DESC
-    `).all(userId).map((row: any) => ({
+    `,
+      [userId]
+    );
+
+    const templates = rows.map((row) => ({
       id: row.id,
       userId: row.user_id,
       name: row.name,
@@ -86,36 +90,45 @@ export async function POST(request: NextRequest) {
       }, { status: 400 });
     }
 
-    const db = getDatabase();
     const templateId = uuidv4();
     const now = new Date().toISOString();
 
     // Insert template
-    db.prepare(`
+    await query(
+      `
       INSERT INTO workout_templates (id, user_id, name, created_at, updated_at)
-      VALUES (?, ?, ?, ?, ?)
-    `).run(templateId, userId, name.trim(), now, now);
+      VALUES ($1, $2, $3, $4, $5)
+    `,
+      [templateId, userId, name.trim(), now, now]
+    );
 
     // Insert exercise associations
-    const insertExercise = db.prepare(`
-      INSERT INTO template_exercises (id, user_id, template_id, exercise_id, order_index)
-      VALUES (?, ?, ?, ?, ?)
-    `);
-
-    exerciseIds.forEach((exerciseId, index) => {
-      insertExercise.run(uuidv4(), userId, templateId, exerciseId, index);
-    });
+    for (let index = 0; index < exerciseIds.length; index++) {
+      const exerciseId = exerciseIds[index];
+      await query(
+        `
+        INSERT INTO template_exercises (id, user_id, template_id, exercise_id, order_index)
+        VALUES ($1, $2, $3, $4, $5)
+      `,
+        [uuidv4(), userId, templateId, exerciseId, index]
+      );
+    }
 
     // Fetch created template with exercises
-    const template = db.prepare(`
+    const templateResult = await query<any>(
+      `
       SELECT
         wt.*,
-        GROUP_CONCAT(te.exercise_id) as exercise_ids
+        STRING_AGG(te.exercise_id, ',') AS exercise_ids
       FROM workout_templates wt
       LEFT JOIN template_exercises te ON wt.id = te.template_id AND te.user_id = wt.user_id
-      WHERE wt.id = ? AND wt.user_id = ?
+      WHERE wt.id = $1 AND wt.user_id = $2
       GROUP BY wt.id
-    `).get(templateId, userId);
+    `,
+      [templateId, userId]
+    );
+
+    const template = templateResult.rows[0];
 
     const responseTemplate: WorkoutTemplate = {
       id: template.id,

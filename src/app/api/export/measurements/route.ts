@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { getDatabase } from '../../../../lib/database';
+import { query } from '../../../../lib/database';
 import { format } from 'date-fns';
 import { getServerSession } from 'next-auth/next';
 import { authOptions } from '../../../../lib/auth';
@@ -13,14 +13,17 @@ export async function GET() {
     }
 
     const userId = session.user.id;
-    const db = getDatabase();
 
     // Fetch all body measurements
-    const measurements = db.prepare(`
+    const result = await query<any>(
+      `
       SELECT * FROM body_measurements
-      WHERE user_id = ?
+      WHERE user_id = $1
       ORDER BY date DESC
-    `).all(userId);
+    `,
+      [userId]
+    );
+    const measurements = result.rows;
 
     if (measurements.length === 0) {
       return new Response('No measurements to export', { status: 404 });

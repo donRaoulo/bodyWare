@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getDatabase } from '../../../lib/database';
+import { query } from '../../../lib/database';
 import { Exercise, ExerciseType, ApiResponse } from '../../../lib/types';
 import { v4 as uuidv4 } from 'uuid';
 import { getServerSession } from 'next-auth/next';
@@ -17,30 +17,30 @@ export async function GET(request: NextRequest) {
     }
 
     const userId = session.user.id;
-    const db = getDatabase();
     const { searchParams } = new URL(request.url);
     const type = searchParams.get('type') as ExerciseType | null;
     const search = searchParams.get('search');
 
-    let query = `
+    let sql = `
       SELECT * FROM exercises
-      WHERE (user_id = ? OR (user_id IS NULL AND is_default = 1))
+      WHERE (user_id = $1 OR (user_id IS NULL AND is_default = true))
     `;
     const params: any[] = [userId];
 
     if (type) {
-      query += ' AND type = ?';
+      sql += ' AND type = $' + (params.length + 1);
       params.push(type);
     }
 
     if (search) {
-      query += ' AND name LIKE ?';
+      sql += ' AND name ILIKE $' + (params.length + 1);
       params.push(`%${search}%`);
     }
 
-    query += ' ORDER BY is_default DESC, name ASC';
+    sql += ' ORDER BY is_default DESC, name ASC';
 
-    const exercises = db.prepare(query).all(...params).map((row: any) => ({
+    const { rows } = await query<any>(sql, params);
+    const exercises = rows.map((row) => ({
       id: row.id,
       userId: row.user_id,
       name: row.name,
@@ -98,11 +98,12 @@ export async function POST(request: NextRequest) {
       }, { status: 400 });
     }
 
-    const db = getDatabase();
-
     // Check if exercise with same name already exists
-    const existing = db.prepare('SELECT id FROM exercises WHERE (user_id = ? OR user_id IS NULL) AND name = ?').get(userId, name.trim());
-    if (existing) {
+    const existing = await query<{ id: string }>(
+      'SELECT id FROM exercises WHERE (user_id = $1 OR user_id IS NULL) AND name = $2',
+      [userId, name.trim()]
+    );
+    if (existing.rows[0]) {
       return NextResponse.json<ApiResponse<Exercise>>({
         success: false,
         error: 'Exercise with this name already exists',
@@ -112,12 +113,16 @@ export async function POST(request: NextRequest) {
     const id = uuidv4();
     const now = new Date().toISOString();
 
-    db.prepare(`
+    await query(
+      `
       INSERT INTO exercises (id, user_id, name, type, is_default, created_at)
-      VALUES (?, ?, ?, ?, ?, ?)
-    `).run(id, userId, name.trim(), type, false, now);
+      VALUES ($1, $2, $3, $4, $5, $6)
+    `,
+      [id, userId, name.trim(), type, false, now]
+    );
 
-    const exercise = db.prepare('SELECT * FROM exercises WHERE id = ?').get(id);
+    const exerciseResult = await query<any>('SELECT * FROM exercises WHERE id = $1', [id]);
+    const exercise = exerciseResult.rows[0];
 
     const responseExercise: Exercise = {
       id: exercise.id,

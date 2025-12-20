@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getDatabase } from '../../../../lib/database';
+import { query } from '../../../../lib/database';
 import { hash } from 'bcryptjs';
 import { v4 as uuidv4 } from 'uuid';
 
@@ -18,19 +18,21 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ success: false, error: 'Passwort muss mindestens 6 Zeichen haben' }, { status: 400 });
     }
 
-    const db = getDatabase();
-    const existing = db.prepare('SELECT id FROM users WHERE email = ?').get(email);
-    if (existing) {
+    const existing = await query<{ id: string }>('SELECT id FROM users WHERE email = $1', [email]);
+    if (existing.rows[0]) {
       return NextResponse.json({ success: false, error: 'E-Mail wird bereits verwendet' }, { status: 409 });
     }
 
     const passwordHash = await hash(password, 10);
     const id = uuidv4();
 
-    db.prepare(`
+    await query(
+      `
       INSERT INTO users (id, name, email, password_hash)
-      VALUES (?, ?, ?, ?)
-    `).run(id, name, email, passwordHash);
+      VALUES ($1, $2, $3, $4)
+    `,
+      [id, name, email, passwordHash]
+    );
 
     return NextResponse.json({ success: true }, { status: 201 });
   } catch (error) {

@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getDatabase } from '../../../../lib/database';
+import { query } from '../../../../lib/database';
 import { WorkoutTemplate, ApiResponse } from '../../../../lib/types';
 import { v4 as uuidv4 } from 'uuid';
 import { getServerSession } from 'next-auth/next';
@@ -21,17 +21,21 @@ export async function GET(
 
     const userId = session.user.id;
     const { id } = await params;
-    const db = getDatabase();
 
-    const template = db.prepare(`
+    const templateResult = await query<any>(
+      `
       SELECT
         wt.*,
-        GROUP_CONCAT(te.exercise_id) as exercise_ids
+        STRING_AGG(te.exercise_id, ',') AS exercise_ids
       FROM workout_templates wt
       LEFT JOIN template_exercises te ON wt.id = te.template_id AND te.user_id = wt.user_id
-      WHERE wt.id = ? AND wt.user_id = ?
+      WHERE wt.id = $1 AND wt.user_id = $2
       GROUP BY wt.id
-    `).get(id, userId);
+    `,
+      [id, userId]
+    );
+
+    const template = templateResult.rows[0];
 
     if (!template) {
       return NextResponse.json<ApiResponse<WorkoutTemplate>>({
@@ -102,11 +106,12 @@ export async function PUT(
       }, { status: 400 });
     }
 
-    const db = getDatabase();
-
     // Check if template exists
-    const existingTemplate = db.prepare('SELECT id FROM workout_templates WHERE id = ? AND user_id = ?').get(id, userId);
-    if (!existingTemplate) {
+    const existingTemplate = await query<{ id: string }>(
+      'SELECT id FROM workout_templates WHERE id = $1 AND user_id = $2',
+      [id, userId]
+    );
+    if (!existingTemplate.rows[0]) {
       return NextResponse.json<ApiResponse<WorkoutTemplate>>({
         success: false,
         error: 'Template not found',
@@ -116,35 +121,45 @@ export async function PUT(
     const now = new Date().toISOString();
 
     // Update template
-    db.prepare(`
+    await query(
+      `
       UPDATE workout_templates
-      SET name = ?, updated_at = ?
-      WHERE id = ? AND user_id = ?
-    `).run(name.trim(), now, id, userId);
+      SET name = $1, updated_at = $2
+      WHERE id = $3 AND user_id = $4
+    `,
+      [name.trim(), now, id, userId]
+    );
 
     // Remove existing exercise associations
-    db.prepare('DELETE FROM template_exercises WHERE template_id = ? AND user_id = ?').run(id, userId);
+    await query('DELETE FROM template_exercises WHERE template_id = $1 AND user_id = $2', [id, userId]);
 
     // Insert new exercise associations
-    const insertExercise = db.prepare(`
-      INSERT INTO template_exercises (id, user_id, template_id, exercise_id, order_index)
-      VALUES (?, ?, ?, ?, ?)
-    `);
-
-    exerciseIds.forEach((exerciseId, index) => {
-      insertExercise.run(uuidv4(), userId, id, exerciseId, index);
-    });
+    for (let index = 0; index < exerciseIds.length; index++) {
+      const exerciseId = exerciseIds[index];
+      await query(
+        `
+        INSERT INTO template_exercises (id, user_id, template_id, exercise_id, order_index)
+        VALUES ($1, $2, $3, $4, $5)
+      `,
+        [uuidv4(), userId, id, exerciseId, index]
+      );
+    }
 
     // Fetch updated template with exercises
-    const template = db.prepare(`
+    const templateResult = await query<any>(
+      `
       SELECT
         wt.*,
-        GROUP_CONCAT(te.exercise_id) as exercise_ids
+        STRING_AGG(te.exercise_id, ',') AS exercise_ids
       FROM workout_templates wt
       LEFT JOIN template_exercises te ON wt.id = te.template_id AND te.user_id = wt.user_id
-      WHERE wt.id = ? AND wt.user_id = ?
+      WHERE wt.id = $1 AND wt.user_id = $2
       GROUP BY wt.id
-    `).get(id, userId);
+    `,
+      [id, userId]
+    );
+
+    const template = templateResult.rows[0];
 
     const responseTemplate: WorkoutTemplate = {
       id: template.id,
@@ -184,11 +199,13 @@ export async function DELETE(
 
     const userId = session.user.id;
     const { id } = await params;
-    const db = getDatabase();
 
     // Check if template exists
-    const existingTemplate = db.prepare('SELECT id FROM workout_templates WHERE id = ? AND user_id = ?').get(id, userId);
-    if (!existingTemplate) {
+    const existingTemplate = await query<{ id: string }>(
+      'SELECT id FROM workout_templates WHERE id = $1 AND user_id = $2',
+      [id, userId]
+    );
+    if (!existingTemplate.rows[0]) {
       return NextResponse.json<ApiResponse<null>>({
         success: false,
         error: 'Template not found',
@@ -196,7 +213,7 @@ export async function DELETE(
     }
 
     // Delete template (cascades to template_exercises)
-    db.prepare('DELETE FROM workout_templates WHERE id = ? AND user_id = ?').run(id, userId);
+    await query('DELETE FROM workout_templates WHERE id = $1 AND user_id = $2', [id, userId]);
 
     return NextResponse.json<ApiResponse<null>>({
       success: true,

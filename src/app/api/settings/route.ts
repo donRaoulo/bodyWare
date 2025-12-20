@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getDatabase } from '../../../lib/database';
+import { query } from '../../../lib/database';
 import { UserSettings, ApiResponse } from '../../../lib/types';
 import { getServerSession } from 'next-auth/next';
 import { authOptions } from '../../../lib/auth';
@@ -17,18 +17,22 @@ export async function GET() {
     }
 
     const userId = session.user.id;
-    const db = getDatabase();
 
-    let settings = db.prepare('SELECT * FROM user_settings WHERE user_id = ?').get(userId);
+    let settingsResult = await query<any>('SELECT * FROM user_settings WHERE user_id = $1', [userId]);
+    let settings = settingsResult.rows[0];
 
     // Create default settings if not exist
     if (!settings) {
-      db.prepare(`
+      await query(
+        `
         INSERT INTO user_settings (id, user_id, dashboard_session_limit, dark_mode)
-        VALUES (?, ?, ?, ?)
-      `).run(uuidv4(), userId, 5, false);
+        VALUES ($1, $2, $3, $4)
+      `,
+        [uuidv4(), userId, 5, false]
+      );
 
-      settings = db.prepare('SELECT * FROM user_settings WHERE user_id = ?').get(userId);
+      settingsResult = await query<any>('SELECT * FROM user_settings WHERE user_id = $1', [userId]);
+      settings = settingsResult.rows[0];
     }
 
     const responseSettings: UserSettings = {
@@ -69,16 +73,17 @@ export async function PUT(request: NextRequest) {
       darkMode?: boolean;
     } = body;
 
-    const db = getDatabase();
-
     // Check if settings exist
-    const existingSettings = db.prepare('SELECT id FROM user_settings WHERE user_id = ?').get(userId);
-    if (!existingSettings) {
+    const existingSettings = await query<{ id: string }>('SELECT id FROM user_settings WHERE user_id = $1', [userId]);
+    if (!existingSettings.rows[0]) {
       // Create default settings first
-      db.prepare(`
+      await query(
+        `
         INSERT INTO user_settings (id, user_id, dashboard_session_limit, dark_mode)
-        VALUES (?, ?, ?, ?)
-      `).run(uuidv4(), userId, 5, false);
+        VALUES ($1, $2, $3, $4)
+      `,
+        [uuidv4(), userId, 5, false]
+      );
     }
 
     // Update settings
@@ -92,12 +97,12 @@ export async function PUT(request: NextRequest) {
           error: 'Dashboard session limit must be between 1 and 20',
         }, { status: 400 });
       }
-      updateFields.push('dashboard_session_limit = ?');
+      updateFields.push('dashboard_session_limit = $' + (updateValues.length + 1));
       updateValues.push(dashboardSessionLimit);
     }
 
     if (darkMode !== undefined) {
-      updateFields.push('dark_mode = ?');
+      updateFields.push('dark_mode = $' + (updateValues.length + 1));
       updateValues.push(darkMode);
     }
 
@@ -110,14 +115,18 @@ export async function PUT(request: NextRequest) {
 
     updateValues.push(userId); // for WHERE clause
 
-    db.prepare(`
+    await query(
+      `
       UPDATE user_settings
       SET ${updateFields.join(', ')}
-      WHERE user_id = ?
-    `).run(...updateValues);
+      WHERE user_id = $${updateValues.length}
+    `,
+      updateValues
+    );
 
     // Fetch updated settings
-    const settings = db.prepare('SELECT * FROM user_settings WHERE user_id = ?').get(userId);
+    const settingsResult = await query<any>('SELECT * FROM user_settings WHERE user_id = $1', [userId]);
+    const settings = settingsResult.rows[0];
 
     const responseSettings: UserSettings = {
       id: settings.id,

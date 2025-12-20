@@ -1,7 +1,7 @@
 import { NextAuthOptions } from 'next-auth';
 import CredentialsProvider from 'next-auth/providers/credentials';
 import { compare } from 'bcryptjs';
-import { getDatabase } from './database';
+import { query } from './database';
 
 export const authOptions: NextAuthOptions = {
   session: {
@@ -22,8 +22,8 @@ export const authOptions: NextAuthOptions = {
           return null;
         }
 
-        const db = getDatabase();
-        const user = db.prepare('SELECT * FROM users WHERE email = ?').get(email);
+        const result = await query<any>('SELECT * FROM users WHERE email = $1', [email]);
+        const user = result.rows[0];
         if (!user || !user.password_hash) {
           return null;
         }
