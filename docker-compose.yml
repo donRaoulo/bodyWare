@@ -1,6 +1,20 @@
 version: '3.9'
 
 services:
+  web:
+    build: .
+    container_name: fitflex-web
+    restart: unless-stopped
+    ports:
+      - '3000:3000'
+    env_file:
+      - .env.local
+    environment:
+      DATABASE_URL: postgres://fitflex:fitflex@db:5432/fitflex
+      NEXTAUTH_URL: http://localhost:3000
+    depends_on:
+      - db
+
   db:
     image: postgres:16
     container_name: fitflex-postgres

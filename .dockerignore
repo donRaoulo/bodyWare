@@ -1,0 +1,15 @@
+node_modules
+.next
+.git
+.gitignore
+Dockerfile
+docker-compose.yml
+*.log
+npm-debug.log*
+yarn-debug.log*
+pnpm-debug.log*
+fitflex.db
+coverage
+build
+out
+.env*
