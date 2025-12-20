@@ -73,6 +73,7 @@ export interface UserSettings {
   userId: string;
   dashboardSessionLimit: number;
   darkMode: boolean;
+  primaryColor?: string;
 }
 
 export interface PendingExerciseSelection {

@@ -40,6 +40,7 @@ export async function GET() {
       userId: settings.user_id,
       dashboardSessionLimit: settings.dashboard_session_limit,
       darkMode: Boolean(settings.dark_mode),
+      primaryColor: settings.theme_color || '#58a6ff',
     };
 
     return NextResponse.json<ApiResponse<UserSettings>>({
@@ -71,18 +72,19 @@ export async function PUT(request: NextRequest) {
     const { dashboardSessionLimit, darkMode }: {
       dashboardSessionLimit?: number;
       darkMode?: boolean;
+      primaryColor?: string;
     } = body;
 
     // Check if settings exist
-    const existingSettings = await query<{ id: string }>('SELECT id FROM user_settings WHERE user_id = $1', [userId]);
+    const existingSettings = await query<{ id: string }>('SELECT id, theme_color FROM user_settings WHERE user_id = $1', [userId]);
     if (!existingSettings.rows[0]) {
       // Create default settings first
       await query(
         `
-        INSERT INTO user_settings (id, user_id, dashboard_session_limit, dark_mode)
-        VALUES ($1, $2, $3, $4)
+        INSERT INTO user_settings (id, user_id, dashboard_session_limit, dark_mode, theme_color)
+        VALUES ($1, $2, $3, $4, $5)
       `,
-        [uuidv4(), userId, 5, false]
+        [uuidv4(), userId, 5, false, '#58a6ff']
       );
     }
 
@@ -104,6 +106,19 @@ export async function PUT(request: NextRequest) {
     if (darkMode !== undefined) {
       updateFields.push('dark_mode = $' + (updateValues.length + 1));
       updateValues.push(darkMode);
+    }
+
+    if (body.primaryColor !== undefined) {
+      const color = body.primaryColor;
+      const isValidHex = /^#([0-9A-Fa-f]{6}|[0-9A-Fa-f]{3})$/.test(color);
+      if (!isValidHex) {
+        return NextResponse.json<ApiResponse<UserSettings>>({
+          success: false,
+          error: 'Invalid color format. Use hex like #58a6ff',
+        }, { status: 400 });
+      }
+      updateFields.push('theme_color = $' + (updateValues.length + 1));
+      updateValues.push(color);
     }
 
     if (updateFields.length === 0) {
@@ -133,6 +148,7 @@ export async function PUT(request: NextRequest) {
       userId: settings.user_id,
       dashboardSessionLimit: settings.dashboard_session_limit,
       darkMode: Boolean(settings.dark_mode),
+      primaryColor: settings.theme_color || '#58a6ff',
     };
 
     return NextResponse.json<ApiResponse<UserSettings>>({

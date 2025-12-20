@@ -149,7 +149,8 @@ async function createTables() {
         id TEXT PRIMARY KEY,
         user_id TEXT NOT NULL UNIQUE REFERENCES users(id),
         dashboard_session_limit INTEGER DEFAULT 5 CHECK (dashboard_session_limit BETWEEN 1 AND 20),
-        dark_mode BOOLEAN DEFAULT FALSE
+        dark_mode BOOLEAN DEFAULT FALSE,
+        theme_color TEXT DEFAULT '#58a6ff'
       );
     `);
 
@@ -158,6 +159,19 @@ async function createTables() {
       CREATE INDEX IF NOT EXISTS idx_workout_sessions_user_date ON workout_sessions(user_id, date DESC);
       CREATE INDEX IF NOT EXISTS idx_body_measurements_user_date ON body_measurements(user_id, date DESC);
       CREATE INDEX IF NOT EXISTS idx_template_exercises_user_order ON template_exercises(user_id, template_id, order_index);
+    `);
+
+    // Safe migrations for existing DBs
+    await client.query(`
+      DO $$
+      BEGIN
+        IF NOT EXISTS (
+          SELECT 1 FROM information_schema.columns
+          WHERE table_name = 'user_settings' AND column_name = 'theme_color'
+        ) THEN
+          ALTER TABLE user_settings ADD COLUMN theme_color TEXT DEFAULT '#58a6ff';
+        END IF;
+      END$$;
     `);
 
     // Safe migration: add created_at column if missing (for existing DBs)

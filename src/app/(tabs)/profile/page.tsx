@@ -14,6 +14,8 @@ import {
   Divider,
   Alert,
   CircularProgress,
+  Stack,
+  Chip,
 } from '@mui/material';
 import {
   Person as PersonIcon,
@@ -27,13 +29,15 @@ import { useSession } from 'next-auth/react';
 import { signOut } from 'next-auth/react';
 
 export default function ProfilePage() {
-  const { mode, toggleColorMode } = useTheme();
+  const { mode, toggleColorMode, primaryColor, setPrimaryColor } = useTheme();
   const { data: session } = useSession();
+  const colorPresets = ['#58a6ff', '#1f6feb', '#3fb950', '#ff9500', '#f85149', '#bc8cff', '#7C3AED', '#00bcd4', '#ff4081'];
   const [settings, setSettings] = useState<UserSettings>({
     id: '',
     userId: '',
     dashboardSessionLimit: 5,
     darkMode: false,
+    primaryColor: primaryColor,
   });
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -54,6 +58,9 @@ export default function ProfilePage() {
       const data = await response.json();
       if (data.success && data.data) {
         setSettings(data.data);
+        if (data.data.primaryColor) {
+          setPrimaryColor(data.data.primaryColor);
+        }
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'An error occurred');
@@ -80,6 +87,9 @@ export default function ProfilePage() {
       const data = await response.json();
       if (data.success && data.data) {
         setSettings(data.data);
+        if (data.data.primaryColor) {
+          setPrimaryColor(data.data.primaryColor);
+        }
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to save settings');
@@ -272,6 +282,60 @@ export default function ProfilePage() {
                     disabled={saving}
                   />
                 </Box>
+              </Box>
+
+              <Divider sx={{ my: 2 }} />
+
+              {/* Theme Color */}
+              <Box sx={{ mb: 3 }}>
+                <Typography variant="subtitle1" gutterBottom>
+                  Primary Color
+                </Typography>
+                <Typography variant="body2" color="text.secondary" gutterBottom>
+                  Passe das Farbschema der App an
+                </Typography>
+                <Stack direction="row" spacing={1} alignItems="center" sx={{ flexWrap: 'wrap', rowGap: 1 }}>
+                  <Button
+                    variant="outlined"
+                    size="small"
+                    component="label"
+                  >
+                    Farbe wählen
+                    <input
+                      hidden
+                      type="color"
+                      value={settings.primaryColor || primaryColor}
+                      onChange={(e) => {
+                        const color = e.target.value;
+                        setSettings((prev) => ({ ...prev, primaryColor: color }));
+                        setPrimaryColor(color);
+                        saveSettings({ primaryColor: color });
+                      }}
+                    />
+                  </Button>
+                  <Typography variant="body2" color="text.secondary">
+                    {settings.primaryColor || primaryColor}
+                  </Typography>
+                </Stack>
+                <Stack direction="row" spacing={1} sx={{ flexWrap: 'wrap', mt: 1 }}>
+                  {colorPresets.map((c) => (
+                    <Chip
+                      key={c}
+                      label={c}
+                      onClick={() => {
+                        setSettings((prev) => ({ ...prev, primaryColor: c }));
+                        setPrimaryColor(c);
+                        saveSettings({ primaryColor: c });
+                      }}
+                      sx={{
+                        cursor: 'pointer',
+                        backgroundColor: c,
+                        color: '#fff',
+                        border: settings.primaryColor === c || primaryColor === c ? '2px solid #00000040' : '1px solid #00000020',
+                      }}
+                    />
+                  ))}
+                </Stack>
               </Box>
 
               <Divider sx={{ my: 2 }} />
