@@ -127,7 +127,7 @@ export default function CreateTrainingTemplatePage() {
   return (
     <Box sx={{ maxWidth: 900, mx: 'auto', pt: { xs: 2, md: 6 } }}>
       <Typography variant="h4" component="h1" gutterBottom>
-        Neues Workout-Template
+        Neues Workout
       </Typography>
 
       {error && (

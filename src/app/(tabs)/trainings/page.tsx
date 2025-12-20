@@ -85,7 +85,8 @@ export default function TrainingsPage() {
 
   const handleDeleteClick = () => {
     setDeleteDialogOpen(true);
-    handleMenuClose();
+    // Close menu but keep selection for the dialog
+    setMenuAnchor(null);
   };
 
   const handleDeleteConfirm = async () => {
@@ -133,7 +134,7 @@ export default function TrainingsPage() {
     <Box>
       <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 4 }}>
         <Typography variant="h4" component="h1">
-          Workout Templates
+          Workouts
         </Typography>
         <Button
           variant="contained"
