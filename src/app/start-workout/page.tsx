@@ -384,7 +384,7 @@ export default function StartWorkoutPage() {
                         primary={ex.exerciseName}
                         secondary={
                           maxWeightByExercise[ex.exerciseId] !== undefined
-                            ? `${ex.type} ƒ?½ max ${maxWeightByExercise[ex.exerciseId]} kg`
+                            ? `${ex.type}  (max ${maxWeightByExercise[ex.exerciseId]} kg)`
                             : ex.type
                         }
                         sx={{ m: 0 }}
@@ -459,7 +459,7 @@ export default function StartWorkoutPage() {
                           </Box>
                         ))}
                         <Button startIcon={<AddIcon />} onClick={() => addStrengthSet(ex.exerciseId)} size="small">
-                          Set hinzufÃ¼gen
+                          Set hinzufügen
                         </Button>
                       </Stack>
                     )}
@@ -600,7 +600,7 @@ export default function StartWorkoutPage() {
               </List>
               <Box sx={{ display: 'flex', gap: 2, justifyContent: 'flex-end', mt: 2 }}>
                 <Button variant="outlined" onClick={() => router.push('/trainings')}>
-                  ZurÃ¼ck
+                  Zurück
                 </Button>
                 <Button variant="contained" onClick={startWorkout} disabled={starting}>
                   {starting ? 'Speichert...' : 'Workout speichern'}
