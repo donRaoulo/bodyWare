@@ -1,4 +1,4 @@
-'use client';
+﻿'use client';
 
 import { useEffect, useMemo, useState } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
@@ -19,7 +19,7 @@ import {
   Checkbox,
 } from '@mui/material';
 import type { Exercise, WorkoutTemplate, WorkoutSession, ExerciseSession } from '../../lib/types';
-import { Add as AddIcon, Delete as DeleteIcon } from '@mui/icons-material';
+import { Add as AddIcon, Delete as DeleteIcon, Check as CheckIcon } from '@mui/icons-material';
 
 export default function StartWorkoutPage() {
   const searchParams = useSearchParams();
@@ -43,6 +43,7 @@ export default function StartWorkoutPage() {
     }[]
   >([]);
   const [maxWeightByExercise, setMaxWeightByExercise] = useState<Record<string, number | undefined>>({});
+  const [savedExerciseIds, setSavedExerciseIds] = useState<Set<string>>(() => new Set());
 
   const exerciseMap = useMemo(() => {
     const map = new Map<string, Exercise>();
@@ -71,7 +72,7 @@ export default function StartWorkoutPage() {
 
         const exercisesData = await exercisesRes.json();
         if (!exercisesRes.ok || !exercisesData.success) {
-          throw new Error(exercisesData?.error || 'Übungen konnten nicht geladen werden');
+          throw new Error(exercisesData?.error || 'Ãœbungen konnten nicht geladen werden');
         }
         setExercises(exercisesData.data);
 
@@ -149,7 +150,7 @@ export default function StartWorkoutPage() {
 
           return {
             exerciseId: id,
-            exerciseName: ex?.name || 'Übung',
+            exerciseName: ex?.name || 'Ãœbung',
             type: (ex?.type as Exercise['type']) || 'strength',
             strength: defaultStrength,
             cardio: defaultCardio,
@@ -158,6 +159,7 @@ export default function StartWorkoutPage() {
           };
         });
         setSessionExercises(defaultSessionExercises);
+        setSavedExerciseIds(new Set());
       } catch (err) {
         setError(err instanceof Error ? err.message : 'Laden fehlgeschlagen');
       } finally {
@@ -251,12 +253,24 @@ export default function StartWorkoutPage() {
     );
   };
 
+  const saveExercise = (exerciseId: string) => {
+    setSavedExerciseIds((prev) => {
+      const next = new Set(prev);
+      next.add(exerciseId);
+      return next;
+    });
+  };
+
   const addStrengthSet = (exerciseId: string) => {
     setSessionExercises((prev) =>
       prev.map((ex) => {
         if (ex.exerciseId !== exerciseId) return ex;
         const sets = ex.strength?.sets || [];
-        return { ...ex, strength: { sets: [...sets, { weight: 0, reps: 0 }] } };
+        const lastSet = sets[sets.length - 1];
+        const newSet = lastSet
+          ? { weight: lastSet.weight ?? null, reps: lastSet.reps ?? null }
+          : { weight: null, reps: null };
+        return { ...ex, strength: { sets: [...sets, newSet] } };
       })
     );
   };
@@ -304,10 +318,12 @@ export default function StartWorkoutPage() {
     );
   };
 
+  const visibleExercises = sessionExercises.filter((ex) => !savedExerciseIds.has(ex.exerciseId));
+
   if (!templateId) {
     return (
       <Box sx={{ p: 4 }}>
-        <Alert severity="error">Kein Template gewählt.</Alert>
+        <Alert severity="error">Kein Template gewÃ¤hlt.</Alert>
       </Box>
     );
   }
@@ -327,14 +343,19 @@ export default function StartWorkoutPage() {
       <Card>
         <CardContent>
           {loading ? (
-            <Typography>Lade Template...</Typography>
+            <Typography>Lade Workout...</Typography>
           ) : template ? (
             <>
               <Typography variant="h6" gutterBottom>
                 {template.name}
               </Typography>
+              {visibleExercises.length === 0 && sessionExercises.length > 0 && (
+                <Alert severity="success" sx={{ mb: 1 }}>
+                  Alle Uebungen gespeichert. Du kannst unten das Workout abschliessen.
+                </Alert>
+              )}
               <List dense sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
-                {sessionExercises.map((ex, idx) => (
+                {visibleExercises.map((ex, idx) => (
                   <ListItem
                     key={ex.exerciseId}
                     disableGutters
@@ -348,17 +369,42 @@ export default function StartWorkoutPage() {
                       py: 1,
                     }}
                   >
-                    <ListItemText
-                      primaryTypographyProps={{ variant: 'subtitle1', fontWeight: 600 }}
-                      secondaryTypographyProps={{ variant: 'caption' }}
-                      primary={ex.exerciseName}
-                      secondary={
-                        maxWeightByExercise[ex.exerciseId] !== undefined
-                          ? `${ex.type} • max ${maxWeightByExercise[ex.exerciseId]} kg`
-                          : ex.type
-                      }
-                      sx={{ mb: 1 }}
-                    />
+                    <Box
+                      sx={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'space-between',
+                        gap: 1,
+                        mb: 1,
+                      }}
+                    >
+                      <ListItemText
+                        primaryTypographyProps={{ variant: 'subtitle1', fontWeight: 600 }}
+                        secondaryTypographyProps={{ variant: 'caption' }}
+                        primary={ex.exerciseName}
+                        secondary={
+                          maxWeightByExercise[ex.exerciseId] !== undefined
+                            ? `${ex.type} ƒ?½ max ${maxWeightByExercise[ex.exerciseId]} kg`
+                            : ex.type
+                        }
+                        sx={{ m: 0 }}
+                      />
+                      <Button
+                        variant="outlined"
+                        size="small"
+                        startIcon={<CheckIcon fontSize="small" />}
+                        onClick={() => saveExercise(ex.exerciseId)}
+                        sx={{
+                          whiteSpace: 'nowrap',
+                          fontSize: '0.75rem',
+                          px: 1,
+                          py: 0.25,
+                          minWidth: 'auto',
+                        }}
+                      >
+                        Speichern
+                      </Button>
+                    </Box>
                     {ex.type === 'strength' && (
                       <Stack spacing={1}>
                         {ex.strength?.sets?.map((set, sIdx) => (
@@ -413,7 +459,7 @@ export default function StartWorkoutPage() {
                           </Box>
                         ))}
                         <Button startIcon={<AddIcon />} onClick={() => addStrengthSet(ex.exerciseId)} size="small">
-                          Set hinzufügen
+                          Set hinzufÃ¼gen
                         </Button>
                       </Stack>
                     )}
@@ -548,12 +594,13 @@ export default function StartWorkoutPage() {
                         label="Erledigt"
                       />
                     )}
+
                   </ListItem>
                 ))}
               </List>
               <Box sx={{ display: 'flex', gap: 2, justifyContent: 'flex-end', mt: 2 }}>
                 <Button variant="outlined" onClick={() => router.push('/trainings')}>
-                  Zurück
+                  ZurÃ¼ck
                 </Button>
                 <Button variant="contained" onClick={startWorkout} disabled={starting}>
                   {starting ? 'Speichert...' : 'Workout speichern'}
@@ -568,3 +615,8 @@ export default function StartWorkoutPage() {
     </Box>
   );
 }
+
+
+
+
+

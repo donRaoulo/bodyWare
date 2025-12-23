@@ -16,7 +16,7 @@ import {
 import {
   Dashboard as DashboardIcon,
   FitnessCenter as FitnessIcon,
-  MonitorWeight as BodyIcon,
+  Straighten as BodyIcon,
   Person as ProfileIcon,
   Menu as MenuIcon,
 } from '@mui/icons-material';
