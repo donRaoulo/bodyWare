@@ -46,7 +46,7 @@ export default function BodyPage() {
       setError(null);
 
       const response = await fetch('/api/measurements');
-      if (!response.ok) throw new Error('Failed to fetch measurements');
+      if (!response.ok) throw new Error('Messungen konnten nicht geladen werden');
 
       const data = await response.json();
       if (data.success) {
@@ -58,7 +58,7 @@ export default function BodyPage() {
         }
       }
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'An error occurred');
+      setError(err instanceof Error ? err.message : 'Ein Fehler ist aufgetreten');
     } finally {
       setLoading(false);
     }
@@ -77,12 +77,12 @@ export default function BodyPage() {
         method: 'DELETE',
       });
 
-      if (!response.ok) throw new Error('Failed to delete measurement');
+      if (!response.ok) throw new Error('Messung konnte nicht geloescht werden');
 
       // Refresh data
       await fetchMeasurements();
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to delete measurement');
+      setError(err instanceof Error ? err.message : 'Messung konnte nicht geloescht werden');
     } finally {
       setDeleteDialogOpen(false);
       setSelectedMeasurement(null);
@@ -103,14 +103,14 @@ export default function BodyPage() {
   };
 
   const measurementFields = [
-    { key: 'weight', label: 'Weight', icon: <WeightIcon /> },
-    { key: 'chest', label: 'Chest', icon: <MeasurementIcon /> },
-    { key: 'waist', label: 'Waist', icon: <MeasurementIcon /> },
-    { key: 'hips', label: 'Hips', icon: <MeasurementIcon /> },
-    { key: 'upperArm', label: 'Upper Arm', icon: <MeasurementIcon /> },
-    { key: 'forearm', label: 'Forearm', icon: <MeasurementIcon /> },
-    { key: 'thigh', label: 'Thigh', icon: <MeasurementIcon /> },
-    { key: 'calf', label: 'Calf', icon: <MeasurementIcon /> },
+    { key: 'weight', label: 'Gewicht', icon: <WeightIcon /> },
+    { key: 'chest', label: 'Brust', icon: <MeasurementIcon /> },
+    { key: 'waist', label: 'Taille', icon: <MeasurementIcon /> },
+    { key: 'hips', label: 'Huefte', icon: <MeasurementIcon /> },
+    { key: 'upperArm', label: 'Oberarm', icon: <MeasurementIcon /> },
+    { key: 'forearm', label: 'Unterarm', icon: <MeasurementIcon /> },
+    { key: 'thigh', label: 'Oberschenkel', icon: <MeasurementIcon /> },
+    { key: 'calf', label: 'Wade', icon: <MeasurementIcon /> },
   ];
 
   if (loading) {
@@ -125,7 +125,7 @@ export default function BodyPage() {
     <Box>
       <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 4 }}>
         <Typography variant="h4" component="h1">
-          Body Measurements
+          Koerpermessungen
         </Typography>
         <Button
           variant="contained"
@@ -133,7 +133,7 @@ export default function BodyPage() {
           startIcon={<AddIcon />}
           href="/measurements/create"
         >
-          Add
+          New
         </Button>
       </Box>
 
@@ -144,19 +144,19 @@ export default function BodyPage() {
       )}
 
       <Box sx={{ display: 'flex', flexDirection: { xs: 'column', md: 'row' }, gap: 3 }}>
-        {/* Current Measurements */}
+        {/* Aktuelle Messung */}
         <Box sx={{ flex: 1 }}>
           <Card>
             <CardContent sx={{ p: 2 }}>
               <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
                 <TrendingIcon color="primary" sx={{ mr: 1 }} />
-                <Typography variant="subtitle1" fontWeight={600}>Current Measurements</Typography>
+                <Typography variant="subtitle1" fontWeight={600}>Aktuelle Messungen</Typography>
               </Box>
 
               {currentMeasurement ? (
                 <Box>
                   <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
-                    Last measured: {format(new Date(currentMeasurement.date), 'MMM d, yyyy')}
+                    Letzte Messung: {format(new Date(currentMeasurement.date), 'MMM d, yyyy')}
                   </Typography>
                   <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1 }}>
                     {measurementFields.map((field) => {
@@ -186,10 +186,10 @@ export default function BodyPage() {
                 <Box sx={{ textAlign: 'center', py: 3 }}>
                   <WeightIcon sx={{ fontSize: 40, color: 'text.secondary', mb: 1 }} />
                   <Typography variant="subtitle1" color="text.secondary" gutterBottom>
-                    No measurements yet
+                    Noch keine Messungen
                   </Typography>
                   <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-                    Track your body measurements to monitor your fitness progress.
+                    Erfasse deine Koerpermessungen, um deinen Fortschritt zu verfolgen.
                   </Typography>
                   <Button
                     variant="contained"
@@ -197,7 +197,7 @@ export default function BodyPage() {
                     startIcon={<AddIcon />}
                     href="/measurements/create"
                   >
-                    Add
+                    Hinzufuegen
                   </Button>
                 </Box>
               )}
@@ -205,18 +205,18 @@ export default function BodyPage() {
           </Card>
         </Box>
 
-        {/* Measurement History */}
+        {/* Messverlauf */}
         <Box sx={{ flex: 1 }}>
           <Card>
             <CardContent>
               <Typography variant="h6" gutterBottom>
-                Measurement History
+                Messverlauf
               </Typography>
 
               {measurements.length === 0 ? (
                 <Box sx={{ textAlign: 'center', py: 4 }}>
                   <Typography variant="body2" color="text.secondary">
-                    No measurement history yet
+                    Noch kein Messverlauf
                   </Typography>
                 </Box>
               ) : (
@@ -250,28 +250,28 @@ export default function BodyPage() {
                       <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1 }}>
                         {measurement.weight && (
                           <Chip
-                            label={`Weight: ${measurement.weight.toFixed(1)}kg`}
+                            label={`Gewicht: ${measurement.weight.toFixed(1)}kg`}
                             size="small"
                             variant="outlined"
                           />
                         )}
                         {measurement.chest && (
                           <Chip
-                            label={`Chest: ${measurement.chest.toFixed(1)}cm`}
+                            label={`Brust: ${measurement.chest.toFixed(1)}cm`}
                             size="small"
                             variant="outlined"
                           />
                         )}
                         {measurement.waist && (
                           <Chip
-                            label={`Waist: ${measurement.waist.toFixed(1)}cm`}
+                            label={`Taille: ${measurement.waist.toFixed(1)}cm`}
                             size="small"
                             variant="outlined"
                           />
                         )}
                         {measurement.hips && (
                           <Chip
-                            label={`Hips: ${measurement.hips.toFixed(1)}cm`}
+                            label={`Huefte: ${measurement.hips.toFixed(1)}cm`}
                             size="small"
                             variant="outlined"
                           />
