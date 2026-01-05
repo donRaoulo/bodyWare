@@ -51,6 +51,19 @@ export default function StartWorkoutPage() {
     return map;
   }, [exercises]);
 
+  const sortedExercises = useMemo(
+    () =>
+      [...sessionExercises].sort((a, b) => {
+        const aSaved = savedExerciseIds.has(a.exerciseId);
+        const bSaved = savedExerciseIds.has(b.exerciseId);
+        if (aSaved === bSaved) return 0;
+        return aSaved ? 1 : -1;
+      }),
+    [sessionExercises, savedExerciseIds]
+  );
+
+  const allSaved = sessionExercises.length > 0 && sessionExercises.every((ex) => savedExerciseIds.has(ex.exerciseId));
+
   useEffect(() => {
     if (!templateId) return;
     const load = async () => {
@@ -72,7 +85,7 @@ export default function StartWorkoutPage() {
 
         const exercisesData = await exercisesRes.json();
         if (!exercisesRes.ok || !exercisesData.success) {
-          throw new Error(exercisesData?.error || 'Ãœbungen konnten nicht geladen werden');
+          throw new Error(exercisesData?.error || 'Uebungen konnten nicht geladen werden');
         }
         setExercises(exercisesData.data);
 
@@ -150,7 +163,7 @@ export default function StartWorkoutPage() {
 
           return {
             exerciseId: id,
-            exerciseName: ex?.name || 'Ãœbung',
+            exerciseName: ex?.name || 'Uebung',
             type: (ex?.type as Exercise['type']) || 'strength',
             strength: defaultStrength,
             cardio: defaultCardio,
@@ -174,49 +187,70 @@ export default function StartWorkoutPage() {
     setStarting(true);
     setError(null);
     try {
-      // Normalize nulls to numbers before sending
-      const normalizedExercises = sessionExercises.map((ex) => {
-        if (ex.type === 'strength') {
-          return {
-            ...ex,
-            strength: {
-              sets: ex.strength?.sets.map((s) => ({
-                weight: s.weight ?? 0,
-                reps: s.reps ?? 0,
-              })) || [{ weight: 0, reps: 0 }],
-            },
-          };
-        }
-        if (ex.type === 'cardio') {
-          return {
-            ...ex,
-            cardio: {
-              time: ex.cardio?.time ?? 0,
-              level: ex.cardio?.level ?? 1,
-              distance: ex.cardio?.distance ?? 0,
-            },
-          };
-        }
-        if (ex.type === 'endurance') {
-          const time = ex.endurance?.time ?? 0;
-          const distance = ex.endurance?.distance ?? 0;
-          const pace = distance > 0 ? Math.round((time / distance) * 100) / 100 : 0;
-          return {
-            ...ex,
-            endurance: {
-              time,
-              distance,
-              pace,
-            },
-          };
-        }
-        return {
-          ...ex,
-          stretch: {
-            completed: ex.stretch?.completed ?? false,
-          },
-        };
-      });
+      const normalizedExercises = sessionExercises
+        .filter((ex) => savedExerciseIds.has(ex.exerciseId))
+        .map((ex) => {
+          if (ex.type === 'strength') {
+            const filledSets = (ex.strength?.sets || []).filter((s) => s.weight != null || s.reps != null);
+            if (!filledSets.length) return null;
+            return {
+              ...ex,
+              strength: {
+                sets: filledSets.map((s) => ({
+                  weight: s.weight ?? 0,
+                  reps: s.reps ?? 0,
+                })),
+              },
+            };
+          }
+          if (ex.type === 'cardio') {
+            const time = ex.cardio?.time;
+            const level = ex.cardio?.level;
+            const distance = ex.cardio?.distance;
+            const hasData = [time, level, distance].some((v) => v !== null && v !== undefined);
+            if (!hasData) return null;
+            return {
+              ...ex,
+              cardio: {
+                time: time ?? 0,
+                level: level ?? 1,
+                distance: distance ?? 0,
+              },
+            };
+          }
+          if (ex.type === 'endurance') {
+            const time = ex.endurance?.time;
+            const distance = ex.endurance?.distance;
+            const hasData = time != null || distance != null;
+            if (!hasData) return null;
+            const pace = distance && distance > 0 && time ? Math.round((time / distance) * 100) / 100 : 0;
+            return {
+              ...ex,
+              endurance: {
+                time: time ?? 0,
+                distance: distance ?? 0,
+                pace,
+              },
+            };
+          }
+          if (ex.type === 'stretch') {
+            if (!ex.stretch?.completed) return null;
+            return {
+              ...ex,
+              stretch: {
+                completed: true,
+              },
+            };
+          }
+          return null;
+        })
+        .filter((ex): ex is typeof sessionExercises[number] => ex !== null);
+
+      if (!normalizedExercises.length) {
+        setError('Keine gespeicherten Uebungen mit Werten gefunden.');
+        setStarting(false);
+        return;
+      }
 
       const res = await fetch('/api/sessions', {
         method: 'POST',
@@ -318,12 +352,10 @@ export default function StartWorkoutPage() {
     );
   };
 
-  const visibleExercises = sessionExercises.filter((ex) => !savedExerciseIds.has(ex.exerciseId));
-
   if (!templateId) {
     return (
       <Box sx={{ p: 4 }}>
-        <Alert severity="error">Kein Template gewÃ¤hlt.</Alert>
+        <Alert severity="error">Kein Template gewaehlt.</Alert>
       </Box>
     );
   }
@@ -349,258 +381,266 @@ export default function StartWorkoutPage() {
               <Typography variant="h6" gutterBottom>
                 {template.name}
               </Typography>
-              {visibleExercises.length === 0 && sessionExercises.length > 0 && (
+              {allSaved && sessionExercises.length > 0 && (
                 <Alert severity="success" sx={{ mb: 1 }}>
                   Alle Uebungen gespeichert. Du kannst unten das Workout abschliessen.
                 </Alert>
               )}
               <List dense sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
-                {visibleExercises.map((ex, idx) => (
-                  <ListItem
-                    key={ex.exerciseId}
-                    disableGutters
-                    sx={{
-                      flexDirection: 'column',
-                      alignItems: 'stretch',
-                      border: 1,
-                      borderColor: 'divider',
-                      borderRadius: 1,
-                      px: 1,
-                      py: 1,
-                    }}
-                  >
-                    <Box
+                {sortedExercises.map((ex, idx) => {
+                  const isSaved = savedExerciseIds.has(ex.exerciseId);
+                  return (
+                    <ListItem
+                      key={ex.exerciseId}
+                      disableGutters
                       sx={{
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'space-between',
-                        gap: 1,
-                        mb: 1,
+                        flexDirection: 'column',
+                        alignItems: 'stretch',
+                        border: 1,
+                        borderColor: isSaved ? 'action.disabled' : 'divider',
+                        borderRadius: 1,
+                        px: 1,
+                        py: 1,
+                        opacity: isSaved ? 0.6 : 1,
+                        bgcolor: isSaved ? 'action.hover' : 'transparent',
+                        transition: 'opacity 0.2s ease, background-color 0.2s ease',
                       }}
                     >
-                      <ListItemText
-                        primaryTypographyProps={{ variant: 'subtitle1', fontWeight: 600 }}
-                        secondaryTypographyProps={{ variant: 'caption' }}
-                        primary={ex.exerciseName}
-                        secondary={
-                          maxWeightByExercise[ex.exerciseId] !== undefined
-                            ? `${ex.type}  (max ${maxWeightByExercise[ex.exerciseId]} kg)`
-                            : ex.type
-                        }
-                        sx={{ m: 0 }}
-                      />
-                      <Button
-                        variant="outlined"
-                        size="small"
-                        startIcon={<CheckIcon fontSize="small" />}
-                        onClick={() => saveExercise(ex.exerciseId)}
+                      <Box
                         sx={{
-                          whiteSpace: 'nowrap',
-                          fontSize: '0.75rem',
-                          px: 1,
-                          py: 0.25,
-                          minWidth: 'auto',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'space-between',
+                          gap: 1,
+                          mb: 1,
                         }}
                       >
-                        Speichern
-                      </Button>
-                    </Box>
-                    {ex.type === 'strength' && (
-                      <Stack spacing={1}>
-                        {ex.strength?.sets?.map((set, sIdx) => (
-                          <Box
-                            key={sIdx}
-                            sx={{
-                              display: 'flex',
-                              gap: 1,
-                              flexWrap: 'wrap',
-                              alignItems: 'center',
-                            }}
-                          >
-                            <TextField
-                              label="Gewicht (kg)"
-                              type="number"
-                              size="small"
-                              inputProps={{ step: '0.5', inputMode: 'decimal', style: { appearance: 'textfield' }, maxLength: 5 }}
-                              value={set.weight ?? ''}
-                              onChange={(e) => {
-                                const val = e.target.value === '' ? null : Number(e.target.value);
-                                updateStrengthSet(ex.exerciseId, sIdx, 'weight', val);
-                              }}
-                              sx={{
-                                maxWidth: 100,
-                                '& input[type=number]::-webkit-outer-spin-button, & input[type=number]::-webkit-inner-spin-button': {
-                                  WebkitAppearance: 'none',
-                                  margin: 0,
-                                },
-                              }}
-                            />
-                            <TextField
-                              label="Wdh."
-                              type="number"
-                              size="small"
-                              inputProps={{ inputMode: 'numeric', style: { appearance: 'textfield' }, maxLength: 5 }}
-                              value={set.reps ?? ''}
-                              onChange={(e) => {
-                                const val = e.target.value === '' ? null : Number(e.target.value);
-                                updateStrengthSet(ex.exerciseId, sIdx, 'reps', val);
-                              }}
-                              sx={{
-                                maxWidth: 70,
-                                '& input[type=number]::-webkit-outer-spin-button, & input[type=number]::-webkit-inner-spin-button': {
-                                  WebkitAppearance: 'none',
-                                  margin: 0,
-                                },
-                              }}
-                            />
-                            <IconButton size="small" onClick={() => removeStrengthSet(ex.exerciseId, sIdx)}>
-                              <DeleteIcon fontSize="small" />
-                            </IconButton>
-                          </Box>
-                        ))}
-                        <Button startIcon={<AddIcon />} onClick={() => addStrengthSet(ex.exerciseId)} size="small">
-                          Set hinzufügen
+                        <ListItemText
+                          primaryTypographyProps={{ variant: 'subtitle1', fontWeight: 600 }}
+                          secondaryTypographyProps={{ variant: 'caption' }}
+                          primary={ex.exerciseName}
+                          secondary={
+                            maxWeightByExercise[ex.exerciseId] !== undefined
+                              ? `${ex.type}  (max ${maxWeightByExercise[ex.exerciseId]} kg)`
+                              : ex.type
+                          }
+                          sx={{ m: 0 }}
+                        />
+                        <Button
+                          variant="outlined"
+                          color={isSaved ? 'success' : 'primary'}
+                          size="small"
+                          startIcon={<CheckIcon fontSize="small" />}
+                          onClick={() => saveExercise(ex.exerciseId)}
+                          disabled={isSaved}
+                          sx={{
+                            whiteSpace: 'nowrap',
+                            fontSize: '0.75rem',
+                            px: 1,
+                            py: 0.25,
+                            minWidth: 'auto',
+                          }}
+                        >
+                          {isSaved ? 'Gespeichert' : 'Speichern'}
                         </Button>
-                      </Stack>
-                    )}
-                    {ex.type === 'cardio' && (
-                      <Box
-                        sx={{
-                          display: 'flex',
-                          gap: 1,
-                          flexWrap: 'wrap',
-                          alignItems: 'center',
-                        }}
-                      >
-                        <TextField
-                          label="Zeit (Min.)"
-                          type="number"
-                          size="small"
-                          inputProps={{ step: '1', inputMode: 'numeric', style: { appearance: 'textfield' }, maxLength: 5 }}
-                          value={ex.cardio?.time ?? ''}
-                          onChange={(e) => {
-                            const val = e.target.value === '' ? null : Number(e.target.value);
-                            updateCardio(ex.exerciseId, 'time', val);
-                          }}
-                          sx={{
-                            maxWidth: 110,
-                            '& input[type=number]::-webkit-outer-spin-button, & input[type=number]::-webkit-inner-spin-button': {
-                              WebkitAppearance: 'none',
-                              margin: 0,
-                            },
-                          }}
-                        />
-                        <TextField
-                          label="Stufe"
-                          type="number"
-                          size="small"
-                          inputProps={{ step: '1', inputMode: 'numeric', style: { appearance: 'textfield' }, maxLength: 5 }}
-                          value={ex.cardio?.level ?? ''}
-                          onChange={(e) => {
-                            const val = e.target.value === '' ? null : Number(e.target.value);
-                            updateCardio(ex.exerciseId, 'level', val);
-                          }}
-                          sx={{
-                            maxWidth: 100,
-                            '& input[type=number]::-webkit-outer-spin-button, & input[type=number]::-webkit-inner-spin-button': {
-                              WebkitAppearance: 'none',
-                              margin: 0,
-                            },
-                          }}
-                        />
-                        <TextField
-                          label="Distanz (km)"
-                          type="number"
-                          size="small"
-                          inputProps={{ step: '0.1', inputMode: 'decimal', style: { appearance: 'textfield' }, maxLength: 5 }}
-                          value={ex.cardio?.distance ?? ''}
-                          onChange={(e) => {
-                            const val = e.target.value === '' ? null : Number(e.target.value);
-                            updateCardio(ex.exerciseId, 'distance', val);
-                          }}
-                          sx={{
-                            maxWidth: 120,
-                            '& input[type=number]::-webkit-outer-spin-button, & input[type=number]::-webkit-inner-spin-button': {
-                              WebkitAppearance: 'none',
-                              margin: 0,
-                            },
-                          }}
-                        />
                       </Box>
-                    )}
-                    {ex.type === 'endurance' && (
-                      <Box
-                        sx={{
-                          display: 'flex',
-                          gap: 1,
-                          flexWrap: 'wrap',
-                          alignItems: 'center',
-                        }}
-                      >
-                        <TextField
-                          label="Zeit (Min.)"
-                          type="number"
-                          size="small"
-                          inputProps={{ step: '1', inputMode: 'numeric', style: { appearance: 'textfield' }, maxLength: 5 }}
-                          value={ex.endurance?.time ?? ''}
-                          onChange={(e) => {
-                            const val = e.target.value === '' ? null : Number(e.target.value);
-                            updateEndurance(ex.exerciseId, 'time', val);
-                          }}
+                      {ex.type === 'strength' && (
+                        <Stack spacing={1}>
+                          {ex.strength?.sets?.map((set, sIdx) => (
+                            <Box
+                              key={sIdx}
+                              sx={{
+                                display: 'flex',
+                                gap: 1,
+                                flexWrap: 'wrap',
+                                alignItems: 'center',
+                              }}
+                            >
+                              <TextField
+                                label="Gewicht (kg)"
+                                type="number"
+                                size="small"
+                                inputProps={{ step: '0.5', inputMode: 'decimal', style: { appearance: 'textfield' }, maxLength: 5 }}
+                                value={set.weight ?? ''}
+                                onChange={(e) => {
+                                  const val = e.target.value === '' ? null : Number(e.target.value);
+                                  updateStrengthSet(ex.exerciseId, sIdx, 'weight', val);
+                                }}
+                                sx={{
+                                  maxWidth: 100,
+                                  '& input[type=number]::-webkit-outer-spin-button, & input[type=number]::-webkit-inner-spin-button': {
+                                    WebkitAppearance: 'none',
+                                    margin: 0,
+                                  },
+                                }}
+                              />
+                              <TextField
+                                label="Wdh."
+                                type="number"
+                                size="small"
+                                inputProps={{ inputMode: 'numeric', style: { appearance: 'textfield' }, maxLength: 5 }}
+                                value={set.reps ?? ''}
+                                onChange={(e) => {
+                                  const val = e.target.value === '' ? null : Number(e.target.value);
+                                  updateStrengthSet(ex.exerciseId, sIdx, 'reps', val);
+                                }}
+                                sx={{
+                                  maxWidth: 70,
+                                  '& input[type=number]::-webkit-outer-spin-button, & input[type=number]::-webkit-inner-spin-button': {
+                                    WebkitAppearance: 'none',
+                                    margin: 0,
+                                  },
+                                }}
+                              />
+                              <IconButton size="small" onClick={() => removeStrengthSet(ex.exerciseId, sIdx)}>
+                                <DeleteIcon fontSize="small" />
+                              </IconButton>
+                            </Box>
+                          ))}
+                          <Button startIcon={<AddIcon />} onClick={() => addStrengthSet(ex.exerciseId)} size="small">
+                            Set hinzufuegen
+                          </Button>
+                        </Stack>
+                      )}
+                      {ex.type === 'cardio' && (
+                        <Box
                           sx={{
-                            maxWidth: 110,
-                            '& input[type=number]::-webkit-outer-spin-button, & input[type=number]::-webkit-inner-spin-button': {
-                              WebkitAppearance: 'none',
-                              margin: 0,
-                            },
+                            display: 'flex',
+                            gap: 1,
+                            flexWrap: 'wrap',
+                            alignItems: 'center',
                           }}
-                        />
-                        <TextField
-                          label="Distanz (km)"
-                          type="number"
-                          size="small"
-                          inputProps={{ step: '0.1', inputMode: 'decimal', style: { appearance: 'textfield' }, maxLength: 5 }}
-                          value={ex.endurance?.distance ?? ''}
-                          onChange={(e) => {
-                            const val = e.target.value === '' ? null : Number(e.target.value);
-                            updateEndurance(ex.exerciseId, 'distance', val);
-                          }}
-                          sx={{
-                            maxWidth: 100,
-                            '& input[type=number]::-webkit-outer-spin-button, & input[type=number]::-webkit-inner-spin-button': {
-                              WebkitAppearance: 'none',
-                              margin: 0,
-                            },
-                          }}
-                        />
-                        <Box sx={{ minWidth: 110, display: 'flex', alignItems: 'center' }}>
-                          <Typography variant="body2" color="text.secondary" sx={{ mr: 0.5 }}>
-                            Pace:
-                          </Typography>
-                          <Typography variant="body2" fontWeight={600}>
-                            {ex.endurance?.pace ?? 0} min/km
-                          </Typography>
-                        </Box>
-                      </Box>
-                    )}
-                    {ex.type === 'stretch' && (
-                      <FormControlLabel
-                        control={
-                          <Checkbox
-                            checked={ex.stretch?.completed ?? false}
-                            onChange={(e) => updateStretch(ex.exerciseId, e.target.checked)}
+                        >
+                          <TextField
+                            label="Zeit (Min.)"
+                            type="number"
+                            size="small"
+                            inputProps={{ step: '1', inputMode: 'numeric', style: { appearance: 'textfield' }, maxLength: 5 }}
+                            value={ex.cardio?.time ?? ''}
+                            onChange={(e) => {
+                              const val = e.target.value === '' ? null : Number(e.target.value);
+                              updateCardio(ex.exerciseId, 'time', val);
+                            }}
+                            sx={{
+                              maxWidth: 110,
+                              '& input[type=number]::-webkit-outer-spin-button, & input[type=number]::-webkit-inner-spin-button': {
+                                WebkitAppearance: 'none',
+                                margin: 0,
+                              },
+                            }}
                           />
-                        }
-                        label="Erledigt"
-                      />
-                    )}
+                          <TextField
+                            label="Stufe"
+                            type="number"
+                            size="small"
+                            inputProps={{ step: '1', inputMode: 'numeric', style: { appearance: 'textfield' }, maxLength: 5 }}
+                            value={ex.cardio?.level ?? ''}
+                            onChange={(e) => {
+                              const val = e.target.value === '' ? null : Number(e.target.value);
+                              updateCardio(ex.exerciseId, 'level', val);
+                            }}
+                            sx={{
+                              maxWidth: 100,
+                              '& input[type=number]::-webkit-outer-spin-button, & input[type=number]::-webkit-inner-spin-button': {
+                                WebkitAppearance: 'none',
+                                margin: 0,
+                              },
+                            }}
+                          />
+                          <TextField
+                            label="Distanz (km)"
+                            type="number"
+                            size="small"
+                            inputProps={{ step: '0.1', inputMode: 'decimal', style: { appearance: 'textfield' }, maxLength: 5 }}
+                            value={ex.cardio?.distance ?? ''}
+                            onChange={(e) => {
+                              const val = e.target.value === '' ? null : Number(e.target.value);
+                              updateCardio(ex.exerciseId, 'distance', val);
+                            }}
+                            sx={{
+                              maxWidth: 120,
+                              '& input[type=number]::-webkit-outer-spin-button, & input[type=number]::-webkit-inner-spin-button': {
+                                WebkitAppearance: 'none',
+                                margin: 0,
+                              },
+                            }}
+                          />
+                        </Box>
+                      )}
+                      {ex.type === 'endurance' && (
+                        <Box
+                          sx={{
+                            display: 'flex',
+                            gap: 1,
+                            flexWrap: 'wrap',
+                            alignItems: 'center',
+                          }}
+                        >
+                          <TextField
+                            label="Zeit (Min.)"
+                            type="number"
+                            size="small"
+                            inputProps={{ step: '1', inputMode: 'numeric', style: { appearance: 'textfield' }, maxLength: 5 }}
+                            value={ex.endurance?.time ?? ''}
+                            onChange={(e) => {
+                              const val = e.target.value === '' ? null : Number(e.target.value);
+                              updateEndurance(ex.exerciseId, 'time', val);
+                            }}
+                            sx={{
+                              maxWidth: 110,
+                              '& input[type=number]::-webkit-outer-spin-button, & input[type=number]::-webkit-inner-spin-button': {
+                                WebkitAppearance: 'none',
+                                margin: 0,
+                              },
+                            }}
+                          />
+                          <TextField
+                            label="Distanz (km)"
+                            type="number"
+                            size="small"
+                            inputProps={{ step: '0.1', inputMode: 'decimal', style: { appearance: 'textfield' }, maxLength: 5 }}
+                            value={ex.endurance?.distance ?? ''}
+                            onChange={(e) => {
+                              const val = e.target.value === '' ? null : Number(e.target.value);
+                              updateEndurance(ex.exerciseId, 'distance', val);
+                            }}
+                            sx={{
+                              maxWidth: 100,
+                              '& input[type=number]::-webkit-outer-spin-button, & input[type=number]::-webkit-inner-spin-button': {
+                                WebkitAppearance: 'none',
+                                margin: 0,
+                              },
+                            }}
+                          />
+                          <Box sx={{ minWidth: 110, display: 'flex', alignItems: 'center' }}>
+                            <Typography variant="body2" color="text.secondary" sx={{ mr: 0.5 }}>
+                              Pace:
+                            </Typography>
+                            <Typography variant="body2" fontWeight={600}>
+                              {ex.endurance?.pace ?? 0} min/km
+                            </Typography>
+                          </Box>
+                        </Box>
+                      )}
+                      {ex.type === 'stretch' && (
+                        <FormControlLabel
+                          control={
+                            <Checkbox
+                              checked={ex.stretch?.completed ?? false}
+                              onChange={(e) => updateStretch(ex.exerciseId, e.target.checked)}
+                            />
+                          }
+                          label="Erledigt"
+                        />
+                      )}
 
-                  </ListItem>
-                ))}
+                    </ListItem>
+                  );
+                })}
               </List>
               <Box sx={{ display: 'flex', gap: 2, justifyContent: 'flex-end', mt: 2 }}>
                 <Button variant="outlined" onClick={() => router.push('/trainings')}>
-                  Zurück
+                  Zurueck
                 </Button>
                 <Button variant="contained" onClick={startWorkout} disabled={starting}>
                   {starting ? 'Speichert...' : 'Workout speichern'}
@@ -615,6 +655,10 @@ export default function StartWorkoutPage() {
     </Box>
   );
 }
+
+
+
+
 
 
 
