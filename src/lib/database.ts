@@ -7,17 +7,30 @@ const connectionString = process.env.DATABASE_URL || 'postgres://bodyware:bodywa
 export const pool = new Pool({ connectionString });
 
 let initialized = false;
+let initPromise: Promise<void> | null = null;
 
 export async function initDatabase() {
   if (initialized) return;
-  await createTables();
-  await seedDefaultData();
-  initialized = true;
+  if (!initPromise) {
+    initPromise = (async () => {
+      await createTables();
+      await seedDefaultData();
+      initialized = true;
+    })();
+  }
+  try {
+    await initPromise;
+  } catch (error) {
+    initPromise = null;
+    throw error;
+  }
 }
 
 async function createTables() {
   const client = await pool.connect();
+  const lockId = 742991;
   try {
+    await client.query('SELECT pg_advisory_lock($1)', [lockId]);
     await client.query('BEGIN');
 
     await client.query(`
@@ -74,8 +87,10 @@ async function createTables() {
         id TEXT PRIMARY KEY,
         user_id TEXT REFERENCES users(id),
         name TEXT NOT NULL,
-        type TEXT NOT NULL CHECK (type IN ('strength', 'cardio', 'endurance', 'stretch')),
+        type TEXT NOT NULL CHECK (type IN ('strength', 'cardio', 'endurance', 'stretch', 'counter')),
         created_at TIMESTAMPTZ DEFAULT NOW(),
+        goal INTEGER,
+        goal_due_date DATE,
         is_default BOOLEAN DEFAULT FALSE,
         UNIQUE(user_id, name)
       );
@@ -120,11 +135,12 @@ async function createTables() {
         workout_session_id TEXT NOT NULL REFERENCES workout_sessions(id) ON DELETE CASCADE,
         exercise_id TEXT NOT NULL REFERENCES exercises(id),
         exercise_name TEXT NOT NULL,
-        type TEXT NOT NULL CHECK (type IN ('strength', 'cardio', 'endurance', 'stretch')),
+        type TEXT NOT NULL CHECK (type IN ('strength', 'cardio', 'endurance', 'stretch', 'counter')),
         strength_data JSONB,
         cardio_data JSONB,
         endurance_data JSONB,
-        stretch_data JSONB
+        stretch_data JSONB,
+        counter_data JSONB
       );
     `);
 
@@ -174,6 +190,112 @@ async function createTables() {
       END$$;
     `);
 
+    // Safe migration: add goal column for counter exercises
+    await client.query(`
+      DO $$
+      BEGIN
+        IF NOT EXISTS (
+          SELECT 1 FROM information_schema.columns
+          WHERE table_name = 'exercises' AND column_name = 'goal'
+        ) THEN
+          ALTER TABLE exercises ADD COLUMN goal INTEGER;
+        END IF;
+      END$$;
+    `);
+
+    // Safe migration: add goal_due_date column for counter exercises
+    await client.query(`
+      DO $$
+      BEGIN
+        IF NOT EXISTS (
+          SELECT 1 FROM information_schema.columns
+          WHERE table_name = 'exercises' AND column_name = 'goal_due_date'
+        ) THEN
+          ALTER TABLE exercises ADD COLUMN goal_due_date DATE;
+        END IF;
+      END$$;
+    `);
+
+    // Safe migration: add counter_data column for exercise sessions
+    await client.query(`
+      DO $$
+      BEGIN
+        IF NOT EXISTS (
+          SELECT 1 FROM information_schema.columns
+          WHERE table_name = 'exercise_sessions' AND column_name = 'counter_data'
+        ) THEN
+          ALTER TABLE exercise_sessions ADD COLUMN counter_data JSONB;
+        END IF;
+      END$$;
+    `);
+
+    // Safe migration: extend exercise type checks for counter (only if needed)
+    await client.query(`
+      DO $$
+      DECLARE
+        constraint_name TEXT;
+        constraint_def TEXT;
+      BEGIN
+        SELECT conname, pg_get_constraintdef(oid)
+          INTO constraint_name, constraint_def
+        FROM pg_constraint
+        WHERE conrelid = 'exercises'::regclass
+          AND contype = 'c'
+          AND conname = 'exercises_type_check';
+
+        IF constraint_def IS NULL THEN
+          SELECT conname, pg_get_constraintdef(oid)
+            INTO constraint_name, constraint_def
+          FROM pg_constraint
+          WHERE conrelid = 'exercises'::regclass
+            AND contype = 'c'
+            AND pg_get_constraintdef(oid) LIKE '%type IN%';
+        END IF;
+
+        IF constraint_def IS NULL THEN
+          ALTER TABLE exercises
+            ADD CONSTRAINT exercises_type_check CHECK (type IN ('strength', 'cardio', 'endurance', 'stretch', 'counter'));
+        ELSIF constraint_def NOT LIKE '%counter%' THEN
+          EXECUTE format('ALTER TABLE exercises DROP CONSTRAINT %I', constraint_name);
+          ALTER TABLE exercises
+            ADD CONSTRAINT exercises_type_check CHECK (type IN ('strength', 'cardio', 'endurance', 'stretch', 'counter'));
+        END IF;
+      END$$;
+    `);
+
+    await client.query(`
+      DO $$
+      DECLARE
+        constraint_name TEXT;
+        constraint_def TEXT;
+      BEGIN
+        SELECT conname, pg_get_constraintdef(oid)
+          INTO constraint_name, constraint_def
+        FROM pg_constraint
+        WHERE conrelid = 'exercise_sessions'::regclass
+          AND contype = 'c'
+          AND conname = 'exercise_sessions_type_check';
+
+        IF constraint_def IS NULL THEN
+          SELECT conname, pg_get_constraintdef(oid)
+            INTO constraint_name, constraint_def
+          FROM pg_constraint
+          WHERE conrelid = 'exercise_sessions'::regclass
+            AND contype = 'c'
+            AND pg_get_constraintdef(oid) LIKE '%type IN%';
+        END IF;
+
+        IF constraint_def IS NULL THEN
+          ALTER TABLE exercise_sessions
+            ADD CONSTRAINT exercise_sessions_type_check CHECK (type IN ('strength', 'cardio', 'endurance', 'stretch', 'counter'));
+        ELSIF constraint_def NOT LIKE '%counter%' THEN
+          EXECUTE format('ALTER TABLE exercise_sessions DROP CONSTRAINT %I', constraint_name);
+          ALTER TABLE exercise_sessions
+            ADD CONSTRAINT exercise_sessions_type_check CHECK (type IN ('strength', 'cardio', 'endurance', 'stretch', 'counter'));
+        END IF;
+      END$$;
+    `);
+
     // Safe migration: add created_at column if missing (for existing DBs)
     await client.query(`
       DO $$
@@ -199,6 +321,11 @@ async function createTables() {
     console.error('Error creating tables', error);
     throw error;
   } finally {
+    try {
+      await client.query('SELECT pg_advisory_unlock($1)', [lockId]);
+    } catch {
+      // ignore unlock errors so we can release the client
+    }
     client.release();
   }
 }

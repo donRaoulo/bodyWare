@@ -37,6 +37,8 @@ export default function CreateTrainingTemplatePage() {
   const [filterType, setFilterType] = useState<'all' | ExerciseType>('all');
   const [newExerciseName, setNewExerciseName] = useState('');
   const [newExerciseType, setNewExerciseType] = useState<ExerciseType>('strength');
+  const [newExerciseGoal, setNewExerciseGoal] = useState('');
+  const [newExerciseGoalDueDate, setNewExerciseGoalDueDate] = useState('');
   const [newExerciseError, setNewExerciseError] = useState<string | null>(null);
   const [creatingExercise, setCreatingExercise] = useState(false);
 
@@ -99,13 +101,29 @@ export default function CreateTrainingTemplatePage() {
       setNewExerciseError('Name ist erforderlich');
       return;
     }
+    if (newExerciseType === 'counter') {
+      const goalValue = Number(newExerciseGoal);
+      if (!Number.isFinite(goalValue) || goalValue <= 0) {
+        setNewExerciseError('Ziel muss groesser als 0 sein');
+        return;
+      }
+      if (!newExerciseGoalDueDate) {
+        setNewExerciseError('Enddatum ist erforderlich');
+        return;
+      }
+    }
     setCreatingExercise(true);
     setNewExerciseError(null);
     try {
       const res = await fetch('/api/exercises', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name: newExerciseName.trim(), type: newExerciseType }),
+        body: JSON.stringify({
+          name: newExerciseName.trim(),
+          type: newExerciseType,
+          goal: newExerciseType === 'counter' ? Number(newExerciseGoal) : null,
+          goalDueDate: newExerciseType === 'counter' ? newExerciseGoalDueDate : null,
+        }),
       });
       const data = await res.json();
       if (!res.ok || !data.success) {
@@ -117,6 +135,8 @@ export default function CreateTrainingTemplatePage() {
       setExerciseDialogOpen(false);
       setNewExerciseName('');
       setNewExerciseType('strength');
+      setNewExerciseGoal('');
+      setNewExerciseGoalDueDate('');
     } catch (err) {
       setNewExerciseError(err instanceof Error ? err.message : 'Übung konnte nicht erstellt werden');
     } finally {
@@ -231,7 +251,30 @@ export default function CreateTrainingTemplatePage() {
               <MenuItem value="cardio">Cardio</MenuItem>
               <MenuItem value="endurance">Ausdauer</MenuItem>
               <MenuItem value="stretch">Stretch</MenuItem>
+              <MenuItem value="counter">Ziel</MenuItem>
             </TextField>
+            {newExerciseType === 'counter' && (
+              <>
+                <TextField
+                  label="Ziel (Anzahl)"
+                  type="number"
+                  inputProps={{ step: '1', inputMode: 'numeric' }}
+                  value={newExerciseGoal}
+                  onChange={(e) => setNewExerciseGoal(e.target.value)}
+                  required
+                  fullWidth
+                />
+                <TextField
+                  label="Bis Datum"
+                  type="date"
+                  InputLabelProps={{ shrink: true }}
+                  value={newExerciseGoalDueDate}
+                  onChange={(e) => setNewExerciseGoalDueDate(e.target.value)}
+                  required
+                  fullWidth
+                />
+              </>
+            )}
           </Stack>
         </DialogContent>
         <DialogActions>
@@ -266,6 +309,7 @@ export default function CreateTrainingTemplatePage() {
               <MenuItem value="cardio">Cardio</MenuItem>
               <MenuItem value="endurance">Ausdauer</MenuItem>
               <MenuItem value="stretch">Stretch</MenuItem>
+              <MenuItem value="counter">Ziel</MenuItem>
             </TextField>
           </Stack>
           <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1 }}>

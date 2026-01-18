@@ -45,6 +45,8 @@ export async function GET(request: NextRequest) {
       userId: row.user_id,
       name: row.name,
       type: row.type,
+      goal: row.goal ?? null,
+      goalDueDate: row.goal_due_date ?? null,
       createdAt: new Date(row.created_at),
       isDefault: Boolean(row.is_default),
     })) as Exercise[];
@@ -75,7 +77,7 @@ export async function POST(request: NextRequest) {
 
     const userId = session.user.id;
     const body = await request.json();
-    const { name, type }: { name: string; type: ExerciseType } = body;
+    const { name, type, goal, goalDueDate }: { name: string; type: ExerciseType; goal?: number | null; goalDueDate?: string | null } = body;
 
     if (!name || !type) {
       return NextResponse.json<ApiResponse<Exercise>>({
@@ -91,10 +93,28 @@ export async function POST(request: NextRequest) {
       }, { status: 400 });
     }
 
-    if (!['strength', 'cardio', 'endurance', 'stretch'].includes(type)) {
+    if (!['strength', 'cardio', 'endurance', 'stretch', 'counter'].includes(type)) {
       return NextResponse.json<ApiResponse<Exercise>>({
         success: false,
         error: 'Invalid exercise type',
+      }, { status: 400 });
+    }
+
+    const normalizedGoal = type === 'counter'
+      ? (goal !== null && goal !== undefined ? Number(goal) : NaN)
+      : null;
+    const normalizedGoalDueDate = type === 'counter' ? (goalDueDate ? String(goalDueDate) : '') : null;
+
+    if (type === 'counter' && (!Number.isFinite(normalizedGoal) || normalizedGoal <= 0)) {
+      return NextResponse.json<ApiResponse<Exercise>>({
+        success: false,
+        error: 'Goal must be a positive number',
+      }, { status: 400 });
+    }
+    if (type === 'counter' && !normalizedGoalDueDate) {
+      return NextResponse.json<ApiResponse<Exercise>>({
+        success: false,
+        error: 'Goal due date is required',
       }, { status: 400 });
     }
 
@@ -115,10 +135,10 @@ export async function POST(request: NextRequest) {
 
     await query(
       `
-      INSERT INTO exercises (id, user_id, name, type, is_default, created_at)
-      VALUES ($1, $2, $3, $4, $5, $6)
+      INSERT INTO exercises (id, user_id, name, type, goal, goal_due_date, is_default, created_at)
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
     `,
-      [id, userId, name.trim(), type, false, now]
+      [id, userId, name.trim(), type, type === 'counter' ? normalizedGoal : null, type === 'counter' ? normalizedGoalDueDate : null, false, now]
     );
 
     const exerciseResult = await query<any>('SELECT * FROM exercises WHERE id = $1', [id]);
@@ -129,6 +149,8 @@ export async function POST(request: NextRequest) {
       userId: exercise.user_id,
       name: exercise.name,
       type: exercise.type,
+      goal: exercise.goal ?? null,
+      goalDueDate: exercise.goal_due_date ?? null,
       createdAt: new Date(exercise.created_at),
       isDefault: Boolean(exercise.is_default),
     };

@@ -72,6 +72,9 @@ export async function GET(request: NextRequest) {
         if (row.stretch_data) {
           exerciseSession.stretch = parseJson<{ completed: boolean }>(row.stretch_data) || undefined;
         }
+        if (row.counter_data) {
+          exerciseSession.counter = parseJson<{ value: number }>(row.counter_data) || undefined;
+        }
 
         return exerciseSession;
       });
@@ -142,8 +145,8 @@ export async function POST(request: NextRequest) {
         `
         INSERT INTO exercise_sessions (
           id, user_id, workout_session_id, exercise_id, exercise_name, type,
-          strength_data, cardio_data, endurance_data, stretch_data
-        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+          strength_data, cardio_data, endurance_data, stretch_data, counter_data
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
       `,
         [
           uuidv4(),
@@ -156,6 +159,7 @@ export async function POST(request: NextRequest) {
           stringifyJson(exercise.cardio),
           stringifyJson(exercise.endurance),
           stringifyJson(exercise.stretch),
+          stringifyJson(exercise.counter),
         ]
       );
     }

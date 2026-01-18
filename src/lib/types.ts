@@ -1,10 +1,12 @@
-export type ExerciseType = 'strength' | 'cardio' | 'endurance' | 'stretch';
+export type ExerciseType = 'strength' | 'cardio' | 'endurance' | 'stretch' | 'counter';
 
 export interface Exercise {
   id: string;
   userId?: string | null;
   name: string;
   type: ExerciseType;
+  goal?: number | null;
+  goalDueDate?: string | null;
   createdAt: Date;
   isDefault: boolean;
 }
@@ -51,6 +53,9 @@ export interface ExerciseSession {
   };
   stretch?: {
     completed: boolean;
+  };
+  counter?: {
+    value: number;
   };
 }
 
@@ -114,6 +119,12 @@ export const EXERCISE_TYPE_CONFIG = {
     color: '#bc8cff',
     gradient: 'linear-gradient(135deg, #bc8cff, #8957e5)',
     icon: 'self_improvement'
+  },
+  counter: {
+    label: 'Ziel',
+    color: '#f85149',
+    gradient: 'linear-gradient(135deg, #f85149, #da3633)',
+    icon: 'flag'
   }
 } as const;
 

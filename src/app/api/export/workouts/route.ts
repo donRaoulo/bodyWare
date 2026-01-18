@@ -104,6 +104,13 @@ export async function GET() {
             }
             break;
           }
+          case 'counter': {
+            const counterData = parseJson<{ value?: number }>(exercise.counter_data);
+            if (counterData) {
+              details = `${counterData.value ?? 0}`;
+            }
+            break;
+          }
         }
 
         csvContent += [
