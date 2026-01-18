@@ -101,11 +101,14 @@ export async function POST(request: NextRequest) {
     }
 
     const normalizedGoal = type === 'counter'
-      ? (goal !== null && goal !== undefined ? Number(goal) : NaN)
+      ? (goal !== null && goal !== undefined ? Number(goal) : null)
       : null;
     const normalizedGoalDueDate = type === 'counter' ? (goalDueDate ? String(goalDueDate) : '') : null;
 
-    if (type === 'counter' && (!Number.isFinite(normalizedGoal) || normalizedGoal <= 0)) {
+    if (
+      type === 'counter' &&
+      (normalizedGoal === null || !Number.isFinite(normalizedGoal) || normalizedGoal <= 0)
+    ) {
       return NextResponse.json<ApiResponse<Exercise>>({
         success: false,
         error: 'Goal must be a positive number',
