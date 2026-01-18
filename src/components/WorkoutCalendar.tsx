@@ -102,6 +102,10 @@ export function WorkoutCalendar({
     );
   }
 
+  const DaySlot = (props: PickersDayProps<Date>) => (
+    <WorkoutDay {...props} highlightedDays={highlightedDays} />
+  );
+
   return (
     <Card sx={{ mb: 3 }}>
       <CardContent>
@@ -113,9 +117,8 @@ export function WorkoutCalendar({
             value={selectedDate}
             onChange={(date) => onSelectedDateChange(date)}
             displayStaticWrapperAs="desktop"
-            slots={{ day: WorkoutDay }}
+            slots={{ day: DaySlot }}
             slotProps={{
-              day: { highlightedDays },
               actionBar: { actions: [] },
             }}
           />
