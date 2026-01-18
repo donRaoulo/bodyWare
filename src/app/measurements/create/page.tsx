@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import {
   Box,
   Card,
@@ -14,6 +14,7 @@ import {
 import { useRouter } from 'next/navigation';
 import Image from 'next/image';
 import messlinienImage from '@/data/messlinien.png';
+import { useNavigationGuard } from '@/components/NavigationGuardProvider';
 
 type MeasurementFields = {
   date: string;
@@ -34,10 +35,26 @@ export default function CreateMeasurementPage() {
   const [form, setForm] = useState<MeasurementFields>({ date: today });
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
+  const [hasTouched, setHasTouched] = useState(false);
+  const { setGuard, clearGuard, requestNavigation } = useNavigationGuard();
 
   const handleChange = (field: keyof MeasurementFields) => (e: React.ChangeEvent<HTMLInputElement>) => {
+    setHasTouched(true);
     setForm((prev) => ({ ...prev, [field]: e.target.value }));
   };
+
+  useEffect(() => {
+    if (hasTouched && !submitting) {
+      setGuard({
+        enabled: true,
+        message: 'Deine Messung ist noch nicht gespeichert. Wenn du die Seite verlaesst, gehen die Eingaben verloren.',
+      });
+    } else {
+      clearGuard();
+    }
+  }, [clearGuard, hasTouched, setGuard, submitting]);
+
+  useEffect(() => clearGuard, [clearGuard]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -68,6 +85,7 @@ export default function CreateMeasurementPage() {
         throw new Error(data?.error || 'Speichern der Messung fehlgeschlagen');
       }
 
+      clearGuard();
       router.push('/body');
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Speichern der Messung fehlgeschlagen');
@@ -131,7 +149,7 @@ export default function CreateMeasurementPage() {
                   </Stack>
 
                   <Stack direction="row" spacing={1} justifyContent="flex-end">
-                    <Button variant="outlined" size="small" onClick={() => router.push('/body')}>
+                    <Button variant="outlined" size="small" onClick={() => requestNavigation('/body')}>
                       Abbrechen
                     </Button>
                     <Button type="submit" variant="contained" size="small" disabled={submitting}>

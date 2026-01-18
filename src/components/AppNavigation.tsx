@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { usePathname, useRouter } from 'next/navigation';
+import { usePathname } from 'next/navigation';
 import {
   BottomNavigation,
   BottomNavigationAction,
@@ -20,6 +20,7 @@ import {
   Person as ProfileIcon,
   Menu as MenuIcon,
 } from '@mui/icons-material';
+import { useNavigationGuard } from './NavigationGuardProvider';
 
 interface NavigationItem {
   id: string;
@@ -58,7 +59,7 @@ const navigationItems: NavigationItem[] = [
 export function AppNavigation() {
   const theme = useTheme();
   const pathname = usePathname();
-  const router = useRouter();
+  const { requestNavigation } = useNavigationGuard();
   const isMobile = useMediaQuery(theme.breakpoints.down('md'));
   const isAuthPage = pathname?.startsWith('/login') || pathname?.startsWith('/signup');
 
@@ -67,8 +68,10 @@ export function AppNavigation() {
     navigationItems.find(item =>
       pathname === item.href || pathname.startsWith(item.href + '/')
     )?.id
-    // treat start-workout as trainings
-    || (pathname?.startsWith('/start-workout') ? 'trainings' : 'dashboard');
+    // treat workout sessions and measurements as trainings/body
+    || (pathname?.startsWith('/start-workout') ? 'trainings'
+      : pathname?.startsWith('/measurements') ? 'body'
+        : 'dashboard');
 
   // Add bottom padding on mobile so content isn't hidden behind bottom nav
   useEffect(() => {
@@ -85,7 +88,7 @@ export function AppNavigation() {
   }
 
   const handleNavigation = (href: string) => {
-    router.push(href);
+    requestNavigation(href);
   };
 
   // Mobile: Bottom navigation

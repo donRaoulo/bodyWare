@@ -3,13 +3,16 @@
 import { SessionProvider } from 'next-auth/react';
 import { ThemeProvider } from './ThemeProvider';
 import { AppNavigation } from './AppNavigation';
+import { NavigationGuardProvider } from './NavigationGuardProvider';
 
 export function Providers({ children }: { children: React.ReactNode }) {
   return (
     <SessionProvider>
       <ThemeProvider>
-        <AppNavigation />
-        {children}
+        <NavigationGuardProvider>
+          <AppNavigation />
+          {children}
+        </NavigationGuardProvider>
       </ThemeProvider>
     </SessionProvider>
   );

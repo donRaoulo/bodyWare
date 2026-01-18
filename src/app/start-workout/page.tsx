@@ -20,6 +20,7 @@ import {
 } from '@mui/material';
 import type { Exercise, WorkoutTemplate, WorkoutSession, ExerciseSession } from '../../lib/types';
 import { Add as AddIcon, Delete as DeleteIcon, Check as CheckIcon } from '@mui/icons-material';
+import { useNavigationGuard } from '@/components/NavigationGuardProvider';
 
 export default function StartWorkoutPage() {
   const searchParams = useSearchParams();
@@ -31,6 +32,7 @@ export default function StartWorkoutPage() {
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [starting, setStarting] = useState(false);
+  const [hasTouched, setHasTouched] = useState(false);
   const [sessionExercises, setSessionExercises] = useState<
     {
       exerciseId: string;
@@ -44,6 +46,7 @@ export default function StartWorkoutPage() {
   >([]);
   const [maxWeightByExercise, setMaxWeightByExercise] = useState<Record<string, number | undefined>>({});
   const [savedExerciseIds, setSavedExerciseIds] = useState<Set<string>>(() => new Set());
+  const { setGuard, clearGuard, requestNavigation } = useNavigationGuard();
 
   const exerciseMap = useMemo(() => {
     const map = new Map<string, Exercise>();
@@ -70,6 +73,7 @@ export default function StartWorkoutPage() {
       try {
         setLoading(true);
         setError(null);
+        setHasTouched(false);
 
         const [templateRes, exercisesRes, sessionsRes] = await Promise.all([
           fetch(`/api/templates/${templateId}`),
@@ -125,10 +129,12 @@ export default function StartWorkoutPage() {
               ? {
                   sets:
                     last?.strength?.sets?.length
-                      ? last.strength.sets.map((s) => ({
-                          weight: s.weight != null ? Number(s.weight) : null,
-                          reps: s.reps != null ? Number(s.reps) : null,
-                        }))
+                      ? [
+                          {
+                            weight: last.strength.sets[0].weight != null ? Number(last.strength.sets[0].weight) : null,
+                            reps: last.strength.sets[0].reps != null ? Number(last.strength.sets[0].reps) : null,
+                          },
+                        ]
                       : [{ weight: null, reps: null }],
                 }
               : undefined;
@@ -173,6 +179,7 @@ export default function StartWorkoutPage() {
         });
         setSessionExercises(defaultSessionExercises);
         setSavedExerciseIds(new Set());
+        setHasTouched(false);
       } catch (err) {
         setError(err instanceof Error ? err.message : 'Laden fehlgeschlagen');
       } finally {
@@ -181,6 +188,19 @@ export default function StartWorkoutPage() {
     };
     load();
   }, [templateId]);
+
+  useEffect(() => {
+    if (hasTouched && !starting) {
+      setGuard({
+        enabled: true,
+        message: 'Dein Workout ist noch nicht gespeichert. Wenn du die Seite verlaesst, gehen die Eingaben verloren.',
+      });
+    } else {
+      clearGuard();
+    }
+  }, [clearGuard, hasTouched, setGuard, starting]);
+
+  useEffect(() => clearGuard, [clearGuard]);
 
   const startWorkout = async () => {
     if (!template) return;
@@ -275,6 +295,7 @@ export default function StartWorkoutPage() {
   };
 
   const updateStrengthSet = (exerciseId: string, setIndex: number, field: 'weight' | 'reps', value: number | null) => {
+    setHasTouched(true);
     setSessionExercises((prev) =>
       prev.map((ex) => {
         if (ex.exerciseId !== exerciseId) return ex;
@@ -288,6 +309,7 @@ export default function StartWorkoutPage() {
   };
 
   const saveExercise = (exerciseId: string) => {
+    setHasTouched(true);
     setSavedExerciseIds((prev) => {
       const next = new Set(prev);
       next.add(exerciseId);
@@ -296,6 +318,7 @@ export default function StartWorkoutPage() {
   };
 
   const addStrengthSet = (exerciseId: string) => {
+    setHasTouched(true);
     setSessionExercises((prev) =>
       prev.map((ex) => {
         if (ex.exerciseId !== exerciseId) return ex;
@@ -310,6 +333,7 @@ export default function StartWorkoutPage() {
   };
 
   const removeStrengthSet = (exerciseId: string, setIndex: number) => {
+    setHasTouched(true);
     setSessionExercises((prev) =>
       prev.map((ex) => {
         if (ex.exerciseId !== exerciseId) return ex;
@@ -321,6 +345,7 @@ export default function StartWorkoutPage() {
   };
 
   const updateCardio = (exerciseId: string, field: 'time' | 'level' | 'distance', value: number | null) => {
+    setHasTouched(true);
     setSessionExercises((prev) =>
       prev.map((ex) =>
         ex.exerciseId === exerciseId
@@ -331,6 +356,7 @@ export default function StartWorkoutPage() {
   };
 
   const updateEndurance = (exerciseId: string, field: 'time' | 'distance', value: number | null) => {
+    setHasTouched(true);
     setSessionExercises((prev) =>
       prev.map((ex) => {
         if (ex.exerciseId !== exerciseId) return ex;
@@ -345,6 +371,7 @@ export default function StartWorkoutPage() {
   };
 
   const updateStretch = (exerciseId: string, completed: boolean) => {
+    setHasTouched(true);
     setSessionExercises((prev) =>
       prev.map((ex) =>
         ex.exerciseId === exerciseId ? { ...ex, stretch: { completed } } : ex
@@ -639,7 +666,7 @@ export default function StartWorkoutPage() {
                 })}
               </List>
               <Box sx={{ display: 'flex', gap: 2, justifyContent: 'flex-end', mt: 2 }}>
-                <Button variant="outlined" onClick={() => router.push('/trainings')}>
+                <Button variant="outlined" onClick={() => requestNavigation('/trainings')}>
                   Zurueck
                 </Button>
                 <Button variant="contained" onClick={startWorkout} disabled={starting}>
