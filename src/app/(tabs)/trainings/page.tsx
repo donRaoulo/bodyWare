@@ -232,14 +232,6 @@ export default function TrainingsPage() {
                   >
                     Start
                   </Button>
-                  <Button
-                    variant="outlined"
-                    startIcon={<EditIcon />}
-                    component={Link}
-                    href={`/trainings/edit/${template.id}`}
-                  >
-                    Edit
-                  </Button>
                 </Box>
               </Card>
             );

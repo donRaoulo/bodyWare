@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { query, pool } from '../../../../lib/database';
+import { query } from '../../../../lib/database';
 import { WorkoutTemplate, ApiResponse } from '../../../../lib/types';
 import { v4 as uuidv4 } from 'uuid';
 import { getServerSession } from 'next-auth/next';
@@ -34,7 +34,7 @@ export async function GET(
         ) AS last_used_at
       FROM workout_templates wt
       LEFT JOIN template_exercises te ON wt.id = te.template_id AND te.user_id = wt.user_id
-      WHERE wt.id = $1 AND wt.user_id = $2
+      WHERE wt.id = $1 AND wt.user_id = $2 AND wt.is_archived = FALSE
       GROUP BY wt.id
     `,
       [id, userId]
@@ -114,7 +114,7 @@ export async function PUT(
 
     // Check if template exists
     const existingTemplate = await query<{ id: string }>(
-      'SELECT id FROM workout_templates WHERE id = $1 AND user_id = $2',
+      'SELECT id FROM workout_templates WHERE id = $1 AND user_id = $2 AND is_archived = FALSE',
       [id, userId]
     );
     if (!existingTemplate.rows[0]) {
@@ -208,7 +208,7 @@ export async function DELETE(
 
     // Check if template exists
     const existingTemplate = await query<{ id: string }>(
-      'SELECT id FROM workout_templates WHERE id = $1 AND user_id = $2',
+      'SELECT id FROM workout_templates WHERE id = $1 AND user_id = $2 AND is_archived = FALSE',
       [id, userId]
     );
     if (!existingTemplate.rows[0]) {
@@ -218,19 +218,10 @@ export async function DELETE(
       }, { status: 404 });
     }
 
-    const client = await pool.connect();
-    try {
-      await client.query('BEGIN');
-      await client.query('DELETE FROM workout_sessions WHERE template_id = $1 AND user_id = $2', [id, userId]);
-      await client.query('DELETE FROM template_exercises WHERE template_id = $1 AND user_id = $2', [id, userId]);
-      await client.query('DELETE FROM workout_templates WHERE id = $1 AND user_id = $2', [id, userId]);
-      await client.query('COMMIT');
-    } catch (e) {
-      await client.query('ROLLBACK');
-      throw e;
-    } finally {
-      client.release();
-    }
+    await query(
+      'UPDATE workout_templates SET is_archived = TRUE, updated_at = $1 WHERE id = $2 AND user_id = $3',
+      [new Date().toISOString(), id, userId]
+    );
 
     return NextResponse.json<ApiResponse<null>>({
       success: true,

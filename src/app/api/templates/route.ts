@@ -30,7 +30,7 @@ export async function GET() {
         ) AS last_used_at
       FROM workout_templates wt
       LEFT JOIN template_exercises te ON wt.id = te.template_id AND te.user_id = wt.user_id
-      WHERE wt.user_id = $1
+      WHERE wt.user_id = $1 AND wt.is_archived = FALSE
       GROUP BY wt.id
       ORDER BY wt.updated_at DESC
     `,

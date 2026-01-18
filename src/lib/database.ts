@@ -102,7 +102,8 @@ async function createTables() {
         user_id TEXT NOT NULL REFERENCES users(id),
         name TEXT NOT NULL CHECK (char_length(name) >= 2),
         created_at TIMESTAMPTZ DEFAULT NOW(),
-        updated_at TIMESTAMPTZ DEFAULT NOW()
+        updated_at TIMESTAMPTZ DEFAULT NOW(),
+        is_archived BOOLEAN DEFAULT FALSE
       );
     `);
 
@@ -166,7 +167,14 @@ async function createTables() {
         user_id TEXT NOT NULL UNIQUE REFERENCES users(id),
         dashboard_session_limit INTEGER DEFAULT 5 CHECK (dashboard_session_limit BETWEEN 1 AND 20),
         dark_mode BOOLEAN DEFAULT FALSE,
-        theme_color TEXT DEFAULT '#58a6ff'
+        theme_color TEXT DEFAULT '#58a6ff',
+        show_recent_workouts BOOLEAN DEFAULT TRUE,
+        show_calendar BOOLEAN DEFAULT TRUE,
+        show_stats_total_workouts BOOLEAN DEFAULT TRUE,
+        show_stats_this_week BOOLEAN DEFAULT TRUE,
+        show_stats_total_weight BOOLEAN DEFAULT TRUE,
+        show_prs BOOLEAN DEFAULT TRUE,
+        dashboard_widget_order TEXT DEFAULT '["stats","prs","calendar","recent"]'
       );
     `);
 
@@ -310,9 +318,71 @@ async function createTables() {
       END$$;
     `);
 
+    // Safe migration: add is_archived column for templates
+    await client.query(`
+      DO $$
+      BEGIN
+        IF NOT EXISTS (
+          SELECT 1 FROM information_schema.columns
+          WHERE table_name = 'workout_templates' AND column_name = 'is_archived'
+        ) THEN
+          ALTER TABLE workout_templates ADD COLUMN is_archived BOOLEAN DEFAULT FALSE;
+        END IF;
+      END$$;
+    `);
+
     // Ensure index exists when column already present
     await client.query(`
       CREATE INDEX IF NOT EXISTS idx_body_measurements_user_created ON body_measurements(user_id, created_at DESC);
+    `);
+
+    // Safe migrations: add dashboard visibility settings
+    await client.query(`
+      DO $$
+      BEGIN
+        IF NOT EXISTS (
+          SELECT 1 FROM information_schema.columns
+          WHERE table_name = 'user_settings' AND column_name = 'show_recent_workouts'
+        ) THEN
+          ALTER TABLE user_settings ADD COLUMN show_recent_workouts BOOLEAN DEFAULT TRUE;
+        END IF;
+        IF NOT EXISTS (
+          SELECT 1 FROM information_schema.columns
+          WHERE table_name = 'user_settings' AND column_name = 'show_calendar'
+        ) THEN
+          ALTER TABLE user_settings ADD COLUMN show_calendar BOOLEAN DEFAULT TRUE;
+        END IF;
+        IF NOT EXISTS (
+          SELECT 1 FROM information_schema.columns
+          WHERE table_name = 'user_settings' AND column_name = 'show_stats_total_workouts'
+        ) THEN
+          ALTER TABLE user_settings ADD COLUMN show_stats_total_workouts BOOLEAN DEFAULT TRUE;
+        END IF;
+        IF NOT EXISTS (
+          SELECT 1 FROM information_schema.columns
+          WHERE table_name = 'user_settings' AND column_name = 'show_stats_this_week'
+        ) THEN
+          ALTER TABLE user_settings ADD COLUMN show_stats_this_week BOOLEAN DEFAULT TRUE;
+        END IF;
+        IF NOT EXISTS (
+          SELECT 1 FROM information_schema.columns
+          WHERE table_name = 'user_settings' AND column_name = 'show_stats_total_weight'
+        ) THEN
+          ALTER TABLE user_settings ADD COLUMN show_stats_total_weight BOOLEAN DEFAULT TRUE;
+        END IF;
+        IF NOT EXISTS (
+          SELECT 1 FROM information_schema.columns
+          WHERE table_name = 'user_settings' AND column_name = 'show_prs'
+        ) THEN
+          ALTER TABLE user_settings ADD COLUMN show_prs BOOLEAN DEFAULT TRUE;
+        END IF;
+        IF NOT EXISTS (
+          SELECT 1 FROM information_schema.columns
+          WHERE table_name = 'user_settings' AND column_name = 'dashboard_widget_order'
+        ) THEN
+          ALTER TABLE user_settings ADD COLUMN dashboard_widget_order TEXT DEFAULT '["stats","prs","calendar","recent"]';
+        END IF;
+      END$$;
     `);
 
     await client.query('COMMIT');

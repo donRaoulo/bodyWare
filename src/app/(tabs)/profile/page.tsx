@@ -16,12 +16,19 @@ import {
   CircularProgress,
   Stack,
   Chip,
+  Dialog,
+  DialogActions,
+  DialogContent,
+  DialogTitle,
+  IconButton,
 } from '@mui/material';
 import {
   Person as PersonIcon,
   Settings as SettingsIcon,
   Download as DownloadIcon,
   Info as InfoIcon,
+  ArrowUpward as ArrowUpwardIcon,
+  ArrowDownward as ArrowDownwardIcon,
 } from '@mui/icons-material';
 import { UserSettings } from '../../../lib/types';
 import { useTheme } from '../../../components/ThemeProvider';
@@ -38,10 +45,36 @@ export default function ProfilePage() {
     dashboardSessionLimit: 5,
     darkMode: false,
     primaryColor: primaryColor,
+    showRecentWorkouts: true,
+    showCalendar: true,
+    showStatsTotalWorkouts: true,
+    showStatsThisWeek: true,
+    showStatsTotalWeight: true,
+    showPrs: true,
+    dashboardWidgetOrder: ['stats', 'prs', 'calendar', 'recent'],
   });
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+  const [dashboardDialogOpen, setDashboardDialogOpen] = useState(false);
+  const [dashboardDraft, setDashboardDraft] = useState({
+    showRecentWorkouts: true,
+    showCalendar: true,
+    showStatsTotalWorkouts: true,
+    showStatsThisWeek: true,
+    showStatsTotalWeight: true,
+    showPrs: true,
+    dashboardSessionLimit: 5,
+    dashboardWidgetOrder: ['stats', 'prs', 'calendar', 'recent'],
+  });
+  const [aboutOpen, setAboutOpen] = useState(false);
+
+  const dashboardWidgets = [
+    { id: 'stats', label: 'Statistiken' },
+    { id: 'prs', label: 'PRs / Bestleistungen' },
+    { id: 'calendar', label: 'Kalender' },
+    { id: 'recent', label: 'Letzte Workouts' },
+  ];
 
   useEffect(() => {
     fetchSettings();
@@ -107,14 +140,39 @@ export default function ProfilePage() {
     saveSettings({ darkMode: nextDark });
   };
 
-  const handleSessionLimitChange = (event: Event | React.SyntheticEvent, newValue: number | number[]) => {
-    const limit = Array.isArray(newValue) ? newValue[0] : newValue;
-    setSettings(prev => ({ ...prev, dashboardSessionLimit: limit }));
+  const openDashboardSettings = () => {
+    setDashboardDraft({
+      showRecentWorkouts: settings.showRecentWorkouts,
+      showCalendar: settings.showCalendar,
+      showStatsTotalWorkouts: settings.showStatsTotalWorkouts,
+      showStatsThisWeek: settings.showStatsThisWeek,
+      showStatsTotalWeight: settings.showStatsTotalWeight,
+      showPrs: settings.showPrs,
+      dashboardSessionLimit: settings.dashboardSessionLimit,
+      dashboardWidgetOrder: settings.dashboardWidgetOrder?.length
+        ? settings.dashboardWidgetOrder
+        : ['stats', 'prs', 'calendar', 'recent'],
+    });
+    setDashboardDialogOpen(true);
   };
 
-  const handleSessionLimitChangeCommitted = (event: Event | React.SyntheticEvent, newValue: number | number[]) => {
+  const handleDashboardLimitChange = (event: Event | React.SyntheticEvent, newValue: number | number[]) => {
     const limit = Array.isArray(newValue) ? newValue[0] : newValue;
-    saveSettings({ dashboardSessionLimit: limit });
+    setDashboardDraft((prev) => ({ ...prev, dashboardSessionLimit: limit }));
+  };
+
+  const handleDashboardSave = async () => {
+    await saveSettings({
+      dashboardSessionLimit: dashboardDraft.dashboardSessionLimit,
+      showRecentWorkouts: dashboardDraft.showRecentWorkouts,
+      showCalendar: dashboardDraft.showCalendar,
+      showStatsTotalWorkouts: dashboardDraft.showStatsTotalWorkouts,
+      showStatsThisWeek: dashboardDraft.showStatsThisWeek,
+      showStatsTotalWeight: dashboardDraft.showStatsTotalWeight,
+      showPrs: dashboardDraft.showPrs,
+      dashboardWidgetOrder: dashboardDraft.dashboardWidgetOrder,
+    });
+    setDashboardDialogOpen(false);
   };
 
   const handleExportWorkouts = async () => {
@@ -256,32 +314,17 @@ export default function ProfilePage() {
 
               <Divider sx={{ my: 2 }} />
 
-              {/* Dashboard Session Limit */}
+              {/* Dashboard Settings */}
               <Box sx={{ mb: 3 }}>
                 <Typography variant="subtitle1" gutterBottom>
-                  Dashboard Session Limit
+                  Dashboard Einstellungen
                 </Typography>
                 <Typography variant="body2" color="text.secondary" gutterBottom>
-                  Number of recent workouts to show on dashboard
+                  Steuere, welche Bereiche im Dashboard angezeigt werden
                 </Typography>
-                <Box sx={{ px: 2 }}>
-                  <Slider
-                    value={settings.dashboardSessionLimit}
-                    onChange={handleSessionLimitChange}
-                    onChangeCommitted={handleSessionLimitChangeCommitted}
-                    min={1}
-                    max={20}
-                    step={1}
-                    marks={[
-                      { value: 1, label: '1' },
-                      { value: 5, label: '5' },
-                      { value: 10, label: '10' },
-                      { value: 20, label: '20' },
-                    ]}
-                    valueLabelDisplay="auto"
-                    disabled={saving}
-                  />
-                </Box>
+                <Button variant="outlined" onClick={openDashboardSettings}>
+                  Einstellungen bearbeiten
+                </Button>
               </Box>
 
               <Divider sx={{ my: 2 }} />
@@ -375,40 +418,202 @@ export default function ProfilePage() {
         <Box sx={{ flex: "1 1 100%" }}>
           <Card>
             <CardContent>
-              <Box sx={{ display: 'flex', alignItems: 'center', mb: 3 }}>
-                <InfoIcon color="primary" sx={{ mr: 2, fontSize: 32 }} />
-                <Typography variant="h6">About BodyWare</Typography>
+              <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 1 }}>
+                <Box sx={{ display: 'flex', alignItems: 'center' }}>
+                  <InfoIcon color="primary" sx={{ mr: 2, fontSize: 32 }} />
+                  <Typography variant="h6">About BodyWare</Typography>
+                </Box>
+                <Button variant="outlined" onClick={() => setAboutOpen((prev) => !prev)}>
+                  {aboutOpen ? 'Ausblenden' : 'Anzeigen'}
+                </Button>
               </Box>
 
-              <Box sx={{ display: "flex", flexDirection: { xs: "column", md: "row" }, gap: 3 }}>
-                <Box sx={{ flex: 1 }}>
-                  <Typography variant="body1" paragraph>
-                    BodyWare is your personal fitness companion, designed to help you track workouts,
-                    monitor body measurements, and achieve your health goals.
-                  </Typography>
-                  <Typography variant="body2" color="text.secondary" paragraph>
-                    Version: 1.0.0<br />
-                    Build: Cross-platform fitness tracker
-                  </Typography>
+              {aboutOpen && (
+                <Box sx={{ mt: 2 }}>
+                  <Box sx={{ display: "flex", flexDirection: { xs: "column", md: "row" }, gap: 3 }}>
+                    <Box sx={{ flex: 1 }}>
+                      <Typography variant="body1" paragraph>
+                        BodyWare is your personal fitness companion, designed to help you track workouts,
+                        monitor body measurements, and achieve your health goals.
+                      </Typography>
+                      <Typography variant="body2" color="text.secondary" paragraph>
+                        Version: 1.0.0<br />
+                        Build: Cross-platform fitness tracker
+                      </Typography>
+                    </Box>
+                    <Box sx={{ flex: 1 }}>
+                      <Typography variant="body2" color="text.secondary">
+                        <strong>Features:</strong>
+                      </Typography>
+                      <ul>
+                        <li>Custom workout templates</li>
+                        <li>Exercise library with multiple types</li>
+                        <li>Body measurement tracking</li>
+                        <li>Workout calendar with editing</li>
+                        <li>Goal exercises with progress</li>
+                        <li>PRs / Bestleistungen</li>
+                        <li>Dashboard customization</li>
+                        <li>Dark mode support</li>
+                        <li>CSV data export</li>
+                        <li>Cross-platform compatibility</li>
+                      </ul>
+                    </Box>
+                  </Box>
                 </Box>
-                <Box sx={{ flex: 1 }}>
-                  <Typography variant="body2" color="text.secondary">
-                    <strong>Features:</strong>
-                  </Typography>
-                  <ul>
-                    <li>Custom workout templates</li>
-                    <li>Exercise library with multiple types</li>
-                    <li>Body measurement tracking</li>
-                    <li>Dark mode support</li>
-                    <li>CSV data export</li>
-                    <li>Cross-platform compatibility</li>
-                  </ul>
-                </Box>
-              </Box>
+              )}
             </CardContent>
           </Card>
         </Box>
       </Box>
+
+      <Dialog open={dashboardDialogOpen} onClose={() => setDashboardDialogOpen(false)} fullWidth maxWidth="sm">
+        <DialogTitle>Dashboard Einstellungen</DialogTitle>
+        <DialogContent sx={{ pt: 1 }}>
+          <Stack spacing={2}>
+            <FormControlLabel
+              control={
+                <Switch
+                  checked={dashboardDraft.showRecentWorkouts}
+                  onChange={(e) =>
+                    setDashboardDraft((prev) => ({ ...prev, showRecentWorkouts: e.target.checked }))
+                  }
+                />
+              }
+              label="Letzte Workouts anzeigen"
+            />
+
+            <Box sx={{ px: 1 }}>
+              <Typography variant="body2" color="text.secondary" gutterBottom>
+                Anzahl der letzten Workouts
+              </Typography>
+              <Slider
+                value={dashboardDraft.dashboardSessionLimit}
+                onChange={handleDashboardLimitChange}
+                min={1}
+                max={20}
+                step={1}
+                marks={[
+                  { value: 1, label: '1' },
+                  { value: 5, label: '5' },
+                  { value: 10, label: '10' },
+                  { value: 20, label: '20' },
+                ]}
+                valueLabelDisplay="auto"
+                disabled={!dashboardDraft.showRecentWorkouts || saving}
+              />
+            </Box>
+
+            <FormControlLabel
+              control={
+                <Switch
+                  checked={dashboardDraft.showCalendar}
+                  onChange={(e) =>
+                    setDashboardDraft((prev) => ({ ...prev, showCalendar: e.target.checked }))
+                  }
+                />
+              }
+              label="Kalender anzeigen"
+            />
+
+            <Typography variant="subtitle2">Statistiken</Typography>
+            <FormControlLabel
+              control={
+                <Switch
+                  checked={dashboardDraft.showStatsTotalWorkouts}
+                  onChange={(e) =>
+                    setDashboardDraft((prev) => ({ ...prev, showStatsTotalWorkouts: e.target.checked }))
+                  }
+                />
+              }
+              label="Total Workouts"
+            />
+            <FormControlLabel
+              control={
+                <Switch
+                  checked={dashboardDraft.showStatsThisWeek}
+                  onChange={(e) =>
+                    setDashboardDraft((prev) => ({ ...prev, showStatsThisWeek: e.target.checked }))
+                  }
+                />
+              }
+              label="This Week"
+            />
+            <FormControlLabel
+              control={
+                <Switch
+                  checked={dashboardDraft.showStatsTotalWeight}
+                  onChange={(e) =>
+                    setDashboardDraft((prev) => ({ ...prev, showStatsTotalWeight: e.target.checked }))
+                  }
+                />
+              }
+              label="Total Weight"
+            />
+            <FormControlLabel
+              control={
+                <Switch
+                  checked={dashboardDraft.showPrs}
+                  onChange={(e) =>
+                    setDashboardDraft((prev) => ({ ...prev, showPrs: e.target.checked }))
+                  }
+                />
+              }
+              label="PRs / Bestleistungen"
+            />
+
+            <Divider sx={{ my: 1 }} />
+            <Typography variant="subtitle2">Reihenfolge der Widgets</Typography>
+            <Stack spacing={1}>
+              {dashboardDraft.dashboardWidgetOrder.map((widgetId, index) => {
+                const label = dashboardWidgets.find((item) => item.id === widgetId)?.label || widgetId;
+                return (
+                  <Box key={widgetId} sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                    <Typography variant="body2">{label}</Typography>
+                    <Box sx={{ display: 'flex', gap: 0.5 }}>
+                      <IconButton
+                        size="small"
+                        onClick={() =>
+                          setDashboardDraft((prev) => {
+                            if (index === 0) return prev;
+                            const next = [...prev.dashboardWidgetOrder];
+                            [next[index - 1], next[index]] = [next[index], next[index - 1]];
+                            return { ...prev, dashboardWidgetOrder: next };
+                          })
+                        }
+                        disabled={index === 0}
+                        aria-label="Nach oben"
+                      >
+                        <ArrowUpwardIcon fontSize="small" />
+                      </IconButton>
+                      <IconButton
+                        size="small"
+                        onClick={() =>
+                          setDashboardDraft((prev) => {
+                            if (index === prev.dashboardWidgetOrder.length - 1) return prev;
+                            const next = [...prev.dashboardWidgetOrder];
+                            [next[index + 1], next[index]] = [next[index], next[index + 1]];
+                            return { ...prev, dashboardWidgetOrder: next };
+                          })
+                        }
+                        disabled={index === dashboardDraft.dashboardWidgetOrder.length - 1}
+                        aria-label="Nach unten"
+                      >
+                        <ArrowDownwardIcon fontSize="small" />
+                      </IconButton>
+                    </Box>
+                  </Box>
+                );
+              })}
+            </Stack>
+          </Stack>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setDashboardDialogOpen(false)}>Abbrechen</Button>
+          <Button variant="contained" onClick={handleDashboardSave} disabled={saving}>
+            Speichern
+          </Button>
+        </DialogActions>
+      </Dialog>
     </Box>
   );
 }

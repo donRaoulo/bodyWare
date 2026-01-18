@@ -27,6 +27,7 @@ export default function StartWorkoutPage() {
   const searchParams = useSearchParams();
   const router = useRouter();
   const templateId = searchParams.get('templateId');
+  const dateParam = searchParams.get('date');
 
   const [template, setTemplate] = useState<WorkoutTemplate | null>(null);
   const [exercises, setExercises] = useState<Exercise[]>([]);
@@ -233,6 +234,9 @@ export default function StartWorkoutPage() {
     setStarting(true);
     setError(null);
     try {
+      const sessionDate = dateParam ? new Date(dateParam) : new Date();
+      const resolvedDate = Number.isNaN(sessionDate.getTime()) ? new Date() : sessionDate;
+
       const normalizedExercises = sessionExercises
         .filter((ex) => savedExerciseIds.has(ex.exerciseId))
         .map((ex) => {
@@ -314,7 +318,7 @@ export default function StartWorkoutPage() {
         body: JSON.stringify({
           templateId: template.id,
           templateName: template.name,
-          date: new Date().toISOString(),
+          date: resolvedDate.toISOString(),
           exercises: normalizedExercises,
         }),
       });
@@ -453,6 +457,11 @@ export default function StartWorkoutPage() {
               <Typography variant="h6" gutterBottom>
                 {template.name}
               </Typography>
+              {dateParam && !Number.isNaN(new Date(dateParam).getTime()) && (
+                <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
+                  Datum: {format(new Date(dateParam), 'dd.MM.yyyy')}
+                </Typography>
+              )}
               {allSaved && sessionExercises.length > 0 && (
                 <Alert severity="success" sx={{ mb: 1 }}>
                   Alle Uebungen gespeichert. Du kannst unten das Workout abschliessen.

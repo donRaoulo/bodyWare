@@ -79,6 +79,13 @@ export interface UserSettings {
   dashboardSessionLimit: number;
   darkMode: boolean;
   primaryColor?: string;
+  showRecentWorkouts: boolean;
+  showCalendar: boolean;
+  showStatsTotalWorkouts: boolean;
+  showStatsThisWeek: boolean;
+  showStatsTotalWeight: boolean;
+  showPrs: boolean;
+  dashboardWidgetOrder: string[];
 }
 
 export interface PendingExerciseSelection {
