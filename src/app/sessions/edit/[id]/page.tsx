@@ -193,12 +193,14 @@ export default function EditSessionPage() {
     setError(null);
     try {
       const normalizedExercises = exercises
-        .map((ex) => {
+        .map((ex): ExerciseSession | null => {
           if (ex.type === 'strength') {
             const filledSets = (ex.strength?.sets || []).filter((s) => s.weight != null || s.reps != null);
             if (!filledSets.length) return null;
             return {
-              ...ex,
+              exerciseId: ex.exerciseId,
+              exerciseName: ex.exerciseName,
+              type: ex.type,
               strength: {
                 sets: filledSets.map((s) => ({
                   weight: s.weight ?? 0,
@@ -214,7 +216,9 @@ export default function EditSessionPage() {
             const hasData = [time, level, distance].some((v) => v !== null && v !== undefined);
             if (!hasData) return null;
             return {
-              ...ex,
+              exerciseId: ex.exerciseId,
+              exerciseName: ex.exerciseName,
+              type: ex.type,
               cardio: {
                 time: time ?? 0,
                 level: level ?? 1,
@@ -229,7 +233,9 @@ export default function EditSessionPage() {
             if (!hasData) return null;
             const pace = distance && distance > 0 && time ? Math.round((time / distance) * 100) / 100 : 0;
             return {
-              ...ex,
+              exerciseId: ex.exerciseId,
+              exerciseName: ex.exerciseName,
+              type: ex.type,
               endurance: {
                 time: time ?? 0,
                 distance: distance ?? 0,
@@ -240,7 +246,9 @@ export default function EditSessionPage() {
           if (ex.type === 'stretch') {
             if (!ex.stretch?.completed) return null;
             return {
-              ...ex,
+              exerciseId: ex.exerciseId,
+              exerciseName: ex.exerciseName,
+              type: ex.type,
               stretch: { completed: true },
             };
           }
@@ -248,13 +256,15 @@ export default function EditSessionPage() {
             const value = ex.counter?.value;
             if (value == null) return null;
             return {
-              ...ex,
+              exerciseId: ex.exerciseId,
+              exerciseName: ex.exerciseName,
+              type: ex.type,
               counter: { value: Number(value) },
             };
           }
           return null;
         })
-        .filter((ex): ex is EditableExercise => ex !== null);
+        .filter((ex): ex is ExerciseSession => ex !== null);
 
       if (!normalizedExercises.length) {
         setError('Mindestens eine Uebung braucht Werte.');
