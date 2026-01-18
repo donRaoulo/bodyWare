@@ -17,9 +17,12 @@ import {
 } from '@mui/material';
 import { Add as AddIcon, Delete as DeleteIcon } from '@mui/icons-material';
 import { format } from 'date-fns';
-import type { ExerciseSession, WorkoutSession } from '../../../../lib/types';
+import type { ExerciseSession, WorkoutSession, ExerciseType } from '../../../../lib/types';
 
-type EditableExercise = ExerciseSession & {
+type EditableExercise = {
+  exerciseId: string;
+  exerciseName: string;
+  type: ExerciseType;
   strength?: { sets: { weight: number | null; reps: number | null }[] };
   cardio?: { time: number | null; level: number | null; distance: number | null };
   endurance?: { time: number | null; distance: number | null; pace: number | null };
@@ -52,7 +55,7 @@ export default function EditSessionPage() {
         const sessionData: WorkoutSession = data.data;
         setSession(sessionData);
         setExercises(
-          (sessionData.exercises || []).map((ex) => {
+          (sessionData.exercises || []).map((ex): EditableExercise => {
             if (ex.type === 'strength') {
               const sets = ex.strength?.sets?.length
                 ? ex.strength.sets.map((s) => ({
@@ -94,7 +97,7 @@ export default function EditSessionPage() {
                 counter: { value: ex.counter?.value ?? null },
               };
             }
-            return ex as EditableExercise;
+            return { ...ex };
           })
         );
       } catch (err) {
