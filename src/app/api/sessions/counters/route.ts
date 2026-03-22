@@ -20,9 +20,12 @@ export async function GET() {
     const userId = session.user.id;
     const result = await query<{ exercise_id: string; total: string | number | null }>(
       `
-      SELECT exercise_id, SUM((counter_data->>'value')::numeric) AS total
-      FROM exercise_sessions
-      WHERE user_id = $1 AND type = 'counter'
+      SELECT exercise_id, SUM((payload->>'value')::numeric) AS total
+      FROM workout_session_items
+      WHERE user_id = $1 AND exercise_type = 'counter'
+        AND payload IS NOT NULL
+        AND (payload->>'value') IS NOT NULL
+        AND (payload->>'value') <> ''
       GROUP BY exercise_id
     `,
       [userId]

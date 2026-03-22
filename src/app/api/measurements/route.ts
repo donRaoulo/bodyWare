@@ -4,6 +4,7 @@ import { BodyMeasurement, ApiResponse } from '../../../lib/types';
 import { v4 as uuidv4 } from 'uuid';
 import { getServerSession } from 'next-auth/next';
 import { authOptions } from '../../../lib/auth';
+import { fromBodyEntryRow, toBodyMetricsJson } from '../../../lib/body-entries';
 
 // GET /api/measurements - Fetch body measurements
 export async function GET() {
@@ -20,26 +21,14 @@ export async function GET() {
 
     const result = await query<any>(
       `
-      SELECT * FROM body_measurements
+      SELECT * FROM body_entries
       WHERE user_id = $1
-      ORDER BY created_at DESC, date DESC
+      ORDER BY created_at DESC, measured_at DESC
     `,
       [userId]
     );
 
-    const measurements = result.rows.map((row) => ({
-      id: row.id,
-      userId: row.user_id,
-      date: new Date(row.date),
-      weight: row.weight || undefined,
-      chest: row.chest || undefined,
-      waist: row.waist || undefined,
-      hips: row.hips || undefined,
-      upperArm: row.upper_arm || undefined,
-      forearm: row.forearm || undefined,
-      thigh: row.thigh || undefined,
-      calf: row.calf || undefined,
-    })) as BodyMeasurement[];
+    const measurements = result.rows.map(fromBodyEntryRow) as BodyMeasurement[];
 
     return NextResponse.json<ApiResponse<BodyMeasurement[]>>({
       success: true,
@@ -101,44 +90,27 @@ export async function POST(request: NextRequest) {
 
     await query(
       `
-      INSERT INTO body_measurements (
-        id, user_id, date, weight, chest, waist, hips, upper_arm, forearm, thigh, calf
-      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+      INSERT INTO body_entries (
+        id, user_id, measured_at, weight_kg, metrics, created_at
+      ) VALUES ($1, $2, $3, $4, $5::jsonb, $6)
     `,
       [
         id,
         userId,
         date,
         weight ?? null,
-        chest ?? null,
-        waist ?? null,
-        hips ?? null,
-        upperArm ?? null,
-        forearm ?? null,
-        thigh ?? null,
-        calf ?? null,
+        toBodyMetricsJson({ chest, waist, hips, upperArm, forearm, thigh, calf }),
+        new Date().toISOString(),
       ]
     );
 
     const measurementResult = await query<any>(
-      'SELECT * FROM body_measurements WHERE id = $1 AND user_id = $2',
+      'SELECT * FROM body_entries WHERE id = $1 AND user_id = $2',
       [id, userId]
     );
     const measurement = measurementResult.rows[0];
 
-    const responseMeasurement: BodyMeasurement = {
-      id: measurement.id,
-      userId: measurement.user_id,
-      date: new Date(measurement.date),
-      weight: measurement.weight || undefined,
-      chest: measurement.chest || undefined,
-      waist: measurement.waist || undefined,
-      hips: measurement.hips || undefined,
-      upperArm: measurement.upper_arm || undefined,
-      forearm: measurement.forearm || undefined,
-      thigh: measurement.thigh || undefined,
-      calf: measurement.calf || undefined,
-    };
+    const responseMeasurement: BodyMeasurement = fromBodyEntryRow(measurement);
 
     return NextResponse.json<ApiResponse<BodyMeasurement>>({
       success: true,

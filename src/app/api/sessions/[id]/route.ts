@@ -1,9 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { query, parseJson, stringifyJson } from '../../../../lib/database';
+import { query, stringifyJson } from '../../../../lib/database';
 import { WorkoutSession, ExerciseSession, ApiResponse, ExerciseType } from '../../../../lib/types';
 import { v4 as uuidv4 } from 'uuid';
 import { getServerSession } from 'next-auth/next';
 import { authOptions } from '../../../../lib/auth';
+import { fromSessionPayloadRow, toSessionPayload } from '../../../../lib/session-payload';
 
 const allowedTypes: ExerciseType[] = ['strength', 'cardio', 'endurance', 'stretch', 'counter'];
 
@@ -37,45 +38,21 @@ export async function GET(_: NextRequest, { params }: { params: Promise<{ id: st
 
     const exerciseResult = await query<any>(
       `
-      SELECT * FROM exercise_sessions
+      SELECT * FROM workout_session_items
       WHERE workout_session_id = $1 AND user_id = $2
-      ORDER BY id
+      ORDER BY position ASC, id ASC
     `,
       [sessionId, userId]
     );
 
-    const exerciseSessions = exerciseResult.rows.map((row) => {
-      const exerciseSession: ExerciseSession = {
-        exerciseId: row.exercise_id,
-        exerciseName: row.exercise_name,
-        type: row.type,
-      };
-
-      if (row.strength_data) {
-        exerciseSession.strength = parseJson<{ sets: { weight: number; reps: number }[] }>(row.strength_data) || undefined;
-      }
-      if (row.cardio_data) {
-        exerciseSession.cardio = parseJson<{ time: number; level: number; distance: number }>(row.cardio_data) || undefined;
-      }
-      if (row.endurance_data) {
-        exerciseSession.endurance = parseJson<{ time: number; distance: number; pace: number }>(row.endurance_data) || undefined;
-      }
-      if (row.stretch_data) {
-        exerciseSession.stretch = parseJson<{ completed: boolean }>(row.stretch_data) || undefined;
-      }
-      if (row.counter_data) {
-        exerciseSession.counter = parseJson<{ value: number }>(row.counter_data) || undefined;
-      }
-
-      return exerciseSession;
-    });
+    const exerciseSessions = exerciseResult.rows.map(fromSessionPayloadRow);
 
     const responseSession: WorkoutSession = {
       id: sessionRow.id,
       userId: sessionRow.user_id,
-      templateId: sessionRow.template_id,
+      templateId: sessionRow.template_id ?? '',
       templateName: sessionRow.template_name,
-      date: new Date(sessionRow.date),
+      date: new Date(sessionRow.started_at),
       createdAt: new Date(sessionRow.created_at),
       exercises: exerciseSessions,
     };
@@ -151,17 +128,17 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
     }
 
     await query(
-      'DELETE FROM exercise_sessions WHERE workout_session_id = $1 AND user_id = $2',
+      'DELETE FROM workout_session_items WHERE workout_session_id = $1 AND user_id = $2',
       [sessionId, userId]
     );
 
-    for (const exercise of exercises) {
+    for (let index = 0; index < exercises.length; index++) {
+      const exercise = exercises[index];
       await query(
         `
-        INSERT INTO exercise_sessions (
-          id, user_id, workout_session_id, exercise_id, exercise_name, type,
-          strength_data, cardio_data, endurance_data, stretch_data, counter_data
-        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+        INSERT INTO workout_session_items (
+          id, user_id, workout_session_id, exercise_id, exercise_name, exercise_type, position, payload
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
       `,
         [
           uuidv4(),
@@ -170,11 +147,8 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
           exercise.exerciseId,
           exercise.exerciseName,
           exercise.type,
-          stringifyJson(exercise.strength),
-          stringifyJson(exercise.cardio),
-          stringifyJson(exercise.endurance),
-          stringifyJson(exercise.stretch),
-          stringifyJson(exercise.counter),
+          index,
+          stringifyJson(toSessionPayload(exercise)),
         ]
       );
     }
@@ -183,9 +157,9 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
     const responseSession: WorkoutSession = {
       id: sessionRow.id,
       userId: sessionRow.user_id,
-      templateId: sessionRow.template_id,
+      templateId: sessionRow.template_id ?? '',
       templateName: sessionRow.template_name,
-      date: new Date(sessionRow.date),
+      date: new Date(sessionRow.started_at),
       createdAt: new Date(sessionRow.created_at),
       exercises,
     };

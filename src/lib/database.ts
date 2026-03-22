@@ -1,10 +1,25 @@
-import { Pool, QueryResult, QueryResultRow } from 'pg';
+import { Pool, PoolClient, QueryResult, QueryResultRow } from 'pg';
 import { DEFAULT_EXERCISES } from './types';
 import { v4 as uuidv4 } from 'uuid';
 
 const connectionString = process.env.DATABASE_URL || 'postgres://bodyware:bodyware@localhost:5432/bodyware';
 
 export const pool = new Pool({ connectionString });
+
+const SCHEMA_VERSION = 2;
+const SCHEMA_LOCK_ID = 742991;
+const EXERCISE_TYPES = ['strength', 'cardio', 'endurance', 'stretch', 'counter'] as const;
+const DEFAULT_DASHBOARD_CONFIG = {
+  showRecentWorkouts: true,
+  showCalendar: true,
+  showStatsTotalWorkouts: true,
+  showStatsThisWeek: true,
+  showStatsTotalWeight: true,
+  showPrs: true,
+  showQuickstart: true,
+  showWeeklyGoal: true,
+  dashboardWidgetOrder: ['quickstart', 'weeklyGoal', 'stats', 'prs', 'calendar', 'recent'],
+};
 
 let initialized = false;
 let initPromise: Promise<void> | null = null;
@@ -13,9 +28,25 @@ export async function initDatabase() {
   if (initialized) return;
   if (!initPromise) {
     initPromise = (async () => {
-      await createTables();
-      await seedDefaultData();
-      initialized = true;
+      const client = await pool.connect();
+      try {
+        await client.query('SELECT pg_advisory_lock($1)', [SCHEMA_LOCK_ID]);
+        await client.query('BEGIN');
+        await createOrMigrateSchemaV2(client);
+        await seedDefaultData(client);
+        await client.query('COMMIT');
+        initialized = true;
+      } catch (error) {
+        await client.query('ROLLBACK');
+        throw error;
+      } finally {
+        try {
+          await client.query('SELECT pg_advisory_unlock($1)', [SCHEMA_LOCK_ID]);
+        } catch {
+          // ignore unlock errors to ensure client release
+        }
+        client.release();
+      }
     })();
   }
   try {
@@ -26,431 +57,273 @@ export async function initDatabase() {
   }
 }
 
-async function createTables() {
-  const client = await pool.connect();
-  const lockId = 742991;
-  try {
-    await client.query('SELECT pg_advisory_lock($1)', [lockId]);
-    await client.query('BEGIN');
+async function createOrMigrateSchemaV2(client: PoolClient) {
+  await client.query(`
+    CREATE TABLE IF NOT EXISTS app_schema_version (
+      id INTEGER PRIMARY KEY CHECK (id = 1),
+      version INTEGER NOT NULL,
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
+  `);
 
-    await client.query(`
-      CREATE TABLE IF NOT EXISTS users (
-        id TEXT PRIMARY KEY,
-        name TEXT,
-        email TEXT UNIQUE NOT NULL,
-        emailVerified TIMESTAMPTZ,
-        image TEXT,
-        password_hash TEXT,
-        created_at TIMESTAMPTZ DEFAULT NOW()
-      );
-    `);
+  const versionResult = await client.query<{ version: number }>(
+    'SELECT version FROM app_schema_version WHERE id = 1'
+  );
+  if (versionResult.rows[0]?.version === SCHEMA_VERSION) {
+    return;
+  }
 
-    await client.query(`
-      CREATE TABLE IF NOT EXISTS accounts (
-        id SERIAL PRIMARY KEY,
-        userId TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-        type TEXT NOT NULL,
-        provider TEXT NOT NULL,
-        providerAccountId TEXT NOT NULL,
-        refresh_token TEXT,
-        access_token TEXT,
-        expires_at INTEGER,
-        token_type TEXT,
-        scope TEXT,
-        id_token TEXT,
-        session_state TEXT,
-        oauth_token_secret TEXT,
-        oauth_token TEXT,
-        UNIQUE(provider, providerAccountId)
-      );
-    `);
+  // One-time destructive reset because schema v2 is intentionally redesigned.
+  await client.query(`
+    DROP TABLE IF EXISTS user_saved_templates;
+    DROP TABLE IF EXISTS workout_session_items;
+    DROP TABLE IF EXISTS workout_sessions;
+    DROP TABLE IF EXISTS workout_template_items;
+    DROP TABLE IF EXISTS workout_templates;
+    DROP TABLE IF EXISTS body_entries;
+    DROP TABLE IF EXISTS user_preferences;
+    DROP TABLE IF EXISTS exercises;
 
-    await client.query(`
-      CREATE TABLE IF NOT EXISTS sessions (
-        sessionToken TEXT PRIMARY KEY,
-        userId TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-        expires TIMESTAMPTZ NOT NULL
-      );
-    `);
+    DROP TABLE IF EXISTS template_exercises;
+    DROP TABLE IF EXISTS exercise_sessions;
+    DROP TABLE IF EXISTS body_measurements;
+    DROP TABLE IF EXISTS user_settings;
 
-    await client.query(`
-      CREATE TABLE IF NOT EXISTS verification_tokens (
-        identifier TEXT NOT NULL,
-        token TEXT NOT NULL,
-        expires TIMESTAMPTZ NOT NULL,
-        PRIMARY KEY (identifier, token)
-      );
-    `);
+    DROP TABLE IF EXISTS accounts;
+    DROP TABLE IF EXISTS sessions;
+    DROP TABLE IF EXISTS verification_tokens;
+    DROP TABLE IF EXISTS users;
+  `);
 
-    await client.query(`
-      CREATE TABLE IF NOT EXISTS exercises (
-        id TEXT PRIMARY KEY,
-        user_id TEXT REFERENCES users(id),
-        name TEXT NOT NULL,
-        type TEXT NOT NULL CHECK (type IN ('strength', 'cardio', 'endurance', 'stretch', 'counter')),
-        created_at TIMESTAMPTZ DEFAULT NOW(),
-        goal INTEGER,
-        goal_due_date DATE,
-        is_default BOOLEAN DEFAULT FALSE,
-        UNIQUE(user_id, name)
-      );
-    `);
+  const typeCheck = EXERCISE_TYPES.map((type) => `'${type}'`).join(', ');
+  const defaultConfigJson = JSON.stringify(DEFAULT_DASHBOARD_CONFIG);
 
-    await client.query(`
-      CREATE TABLE IF NOT EXISTS workout_templates (
-        id TEXT PRIMARY KEY,
-        user_id TEXT NOT NULL REFERENCES users(id),
-        name TEXT NOT NULL CHECK (char_length(name) >= 2),
-        created_at TIMESTAMPTZ DEFAULT NOW(),
-        updated_at TIMESTAMPTZ DEFAULT NOW(),
-        is_archived BOOLEAN DEFAULT FALSE
-      );
-    `);
+  await client.query(`
+    CREATE TABLE users (
+      id TEXT PRIMARY KEY,
+      name TEXT,
+      email TEXT UNIQUE NOT NULL,
+      emailVerified TIMESTAMPTZ,
+      image TEXT,
+      password_hash TEXT,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
 
-    await client.query(`
-      CREATE TABLE IF NOT EXISTS template_exercises (
-        id TEXT PRIMARY KEY,
-        user_id TEXT NOT NULL REFERENCES users(id),
-        template_id TEXT NOT NULL REFERENCES workout_templates(id) ON DELETE CASCADE,
-        exercise_id TEXT NOT NULL REFERENCES exercises(id),
-        order_index INTEGER NOT NULL,
-        UNIQUE(template_id, exercise_id, user_id)
-      );
-    `);
+    CREATE TABLE accounts (
+      id SERIAL PRIMARY KEY,
+      userId TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      type TEXT NOT NULL,
+      provider TEXT NOT NULL,
+      providerAccountId TEXT NOT NULL,
+      refresh_token TEXT,
+      access_token TEXT,
+      expires_at INTEGER,
+      token_type TEXT,
+      scope TEXT,
+      id_token TEXT,
+      session_state TEXT,
+      oauth_token_secret TEXT,
+      oauth_token TEXT,
+      UNIQUE(provider, providerAccountId)
+    );
 
-    await client.query(`
-      CREATE TABLE IF NOT EXISTS workout_sessions (
-        id TEXT PRIMARY KEY,
-        user_id TEXT NOT NULL REFERENCES users(id),
-        template_id TEXT NOT NULL REFERENCES workout_templates(id),
-        template_name TEXT NOT NULL,
-        date TIMESTAMPTZ DEFAULT NOW(),
-        created_at TIMESTAMPTZ DEFAULT NOW()
-      );
-    `);
+    CREATE TABLE sessions (
+      sessionToken TEXT PRIMARY KEY,
+      userId TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      expires TIMESTAMPTZ NOT NULL
+    );
 
-    await client.query(`
-      CREATE TABLE IF NOT EXISTS exercise_sessions (
-        id TEXT PRIMARY KEY,
-        user_id TEXT NOT NULL REFERENCES users(id),
-        workout_session_id TEXT NOT NULL REFERENCES workout_sessions(id) ON DELETE CASCADE,
-        exercise_id TEXT NOT NULL REFERENCES exercises(id),
-        exercise_name TEXT NOT NULL,
-        type TEXT NOT NULL CHECK (type IN ('strength', 'cardio', 'endurance', 'stretch', 'counter')),
-        strength_data JSONB,
-        cardio_data JSONB,
-        endurance_data JSONB,
-        stretch_data JSONB,
-        counter_data JSONB
-      );
-    `);
+    CREATE TABLE verification_tokens (
+      identifier TEXT NOT NULL,
+      token TEXT NOT NULL,
+      expires TIMESTAMPTZ NOT NULL,
+      PRIMARY KEY (identifier, token)
+    );
 
-    await client.query(`
-      CREATE TABLE IF NOT EXISTS body_measurements (
-        id TEXT PRIMARY KEY,
-        user_id TEXT NOT NULL REFERENCES users(id),
-        date TIMESTAMPTZ DEFAULT NOW(),
-        weight REAL,
-        chest REAL,
-        waist REAL,
-        hips REAL,
-        upper_arm REAL,
-        forearm REAL,
-        thigh REAL,
-        calf REAL
-      );
-    `);
+    CREATE TABLE exercises (
+      id TEXT PRIMARY KEY,
+      owner_user_id TEXT REFERENCES users(id) ON DELETE CASCADE,
+      source_exercise_id TEXT REFERENCES exercises(id) ON DELETE SET NULL,
+      name TEXT NOT NULL CHECK (char_length(trim(name)) >= 2),
+      type TEXT NOT NULL CHECK (type IN (${typeCheck})),
+      goal_value NUMERIC,
+      goal_due_date DATE,
+      is_builtin BOOLEAN NOT NULL DEFAULT FALSE,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      archived_at TIMESTAMPTZ
+    );
 
-    await client.query(`
-      CREATE TABLE IF NOT EXISTS user_settings (
-        id TEXT PRIMARY KEY,
-        user_id TEXT NOT NULL UNIQUE REFERENCES users(id),
-        dashboard_session_limit INTEGER DEFAULT 5 CHECK (dashboard_session_limit BETWEEN 1 AND 20),
-        dark_mode BOOLEAN DEFAULT FALSE,
-        theme_color TEXT DEFAULT '#58a6ff',
-        show_recent_workouts BOOLEAN DEFAULT TRUE,
-        show_calendar BOOLEAN DEFAULT TRUE,
-        show_stats_total_workouts BOOLEAN DEFAULT TRUE,
-        show_stats_this_week BOOLEAN DEFAULT TRUE,
-        show_stats_total_weight BOOLEAN DEFAULT TRUE,
-        show_prs BOOLEAN DEFAULT TRUE,
-        show_quickstart BOOLEAN DEFAULT TRUE,
-        show_weekly_goal BOOLEAN DEFAULT TRUE,
-        dashboard_widget_order TEXT DEFAULT '["quickstart","weeklyGoal","stats","prs","calendar","recent"]'
-      );
-    `);
+    CREATE TABLE workout_templates (
+      id TEXT PRIMARY KEY,
+      owner_user_id TEXT REFERENCES users(id) ON DELETE CASCADE,
+      source_template_id TEXT REFERENCES workout_templates(id) ON DELETE SET NULL,
+      name TEXT NOT NULL CHECK (char_length(trim(name)) >= 2),
+      description TEXT,
+      is_builtin BOOLEAN NOT NULL DEFAULT FALSE,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      archived_at TIMESTAMPTZ
+    );
 
-    await client.query(`
-      CREATE INDEX IF NOT EXISTS idx_exercises_user_type ON exercises(user_id, type);
-      CREATE INDEX IF NOT EXISTS idx_workout_sessions_user_date ON workout_sessions(user_id, date DESC);
-      CREATE INDEX IF NOT EXISTS idx_body_measurements_user_date ON body_measurements(user_id, date DESC);
-      CREATE INDEX IF NOT EXISTS idx_template_exercises_user_order ON template_exercises(user_id, template_id, order_index);
-    `);
+    CREATE TABLE workout_template_items (
+      id TEXT PRIMARY KEY,
+      template_id TEXT NOT NULL REFERENCES workout_templates(id) ON DELETE CASCADE,
+      exercise_id TEXT NOT NULL REFERENCES exercises(id),
+      position INTEGER NOT NULL CHECK (position >= 0),
+      config_json JSONB NOT NULL DEFAULT '{}'::jsonb,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      UNIQUE(template_id, position)
+    );
 
-    // Safe migrations for existing DBs
-    await client.query(`
-      DO $$
-      BEGIN
-        IF NOT EXISTS (
-          SELECT 1 FROM information_schema.columns
-          WHERE table_name = 'user_settings' AND column_name = 'theme_color'
-        ) THEN
-          ALTER TABLE user_settings ADD COLUMN theme_color TEXT DEFAULT '#58a6ff';
-        END IF;
-      END$$;
-    `);
+    CREATE TABLE user_saved_templates (
+      user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      template_id TEXT NOT NULL REFERENCES workout_templates(id) ON DELETE CASCADE,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      PRIMARY KEY (user_id, template_id)
+    );
 
-    // Safe migration: add goal column for counter exercises
-    await client.query(`
-      DO $$
-      BEGIN
-        IF NOT EXISTS (
-          SELECT 1 FROM information_schema.columns
-          WHERE table_name = 'exercises' AND column_name = 'goal'
-        ) THEN
-          ALTER TABLE exercises ADD COLUMN goal INTEGER;
-        END IF;
-      END$$;
-    `);
+    CREATE TABLE workout_sessions (
+      id TEXT PRIMARY KEY,
+      user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      template_id TEXT REFERENCES workout_templates(id) ON DELETE SET NULL,
+      template_name TEXT NOT NULL,
+      started_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
 
-    // Safe migration: add goal_due_date column for counter exercises
-    await client.query(`
-      DO $$
-      BEGIN
-        IF NOT EXISTS (
-          SELECT 1 FROM information_schema.columns
-          WHERE table_name = 'exercises' AND column_name = 'goal_due_date'
-        ) THEN
-          ALTER TABLE exercises ADD COLUMN goal_due_date DATE;
-        END IF;
-      END$$;
-    `);
+    CREATE TABLE workout_session_items (
+      id TEXT PRIMARY KEY,
+      workout_session_id TEXT NOT NULL REFERENCES workout_sessions(id) ON DELETE CASCADE,
+      user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      exercise_id TEXT NOT NULL REFERENCES exercises(id),
+      exercise_name TEXT NOT NULL,
+      exercise_type TEXT NOT NULL CHECK (exercise_type IN (${typeCheck})),
+      position INTEGER NOT NULL CHECK (position >= 0),
+      payload JSONB,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      UNIQUE(workout_session_id, position)
+    );
 
-    // Safe migration: add counter_data column for exercise sessions
-    await client.query(`
-      DO $$
-      BEGIN
-        IF NOT EXISTS (
-          SELECT 1 FROM information_schema.columns
-          WHERE table_name = 'exercise_sessions' AND column_name = 'counter_data'
-        ) THEN
-          ALTER TABLE exercise_sessions ADD COLUMN counter_data JSONB;
-        END IF;
-      END$$;
-    `);
+    CREATE TABLE body_entries (
+      id TEXT PRIMARY KEY,
+      user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      measured_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      weight_kg NUMERIC(7,2),
+      metrics JSONB NOT NULL DEFAULT '{}'::jsonb,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
 
-    // Safe migration: extend exercise type checks for counter (only if needed)
-    await client.query(`
-      DO $$
-      DECLARE
-        constraint_name TEXT;
-        constraint_def TEXT;
-      BEGIN
-        SELECT conname, pg_get_constraintdef(oid)
-          INTO constraint_name, constraint_def
-        FROM pg_constraint
-        WHERE conrelid = 'exercises'::regclass
-          AND contype = 'c'
-          AND conname = 'exercises_type_check';
+    CREATE TABLE user_preferences (
+      id TEXT PRIMARY KEY,
+      user_id TEXT NOT NULL UNIQUE REFERENCES users(id) ON DELETE CASCADE,
+      dashboard_session_limit INTEGER NOT NULL DEFAULT 5 CHECK (dashboard_session_limit BETWEEN 1 AND 20),
+      dark_mode BOOLEAN NOT NULL DEFAULT FALSE,
+      theme_color TEXT NOT NULL DEFAULT '#58a6ff',
+      dashboard_config JSONB NOT NULL DEFAULT '${defaultConfigJson}'::jsonb,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
 
-        IF constraint_def IS NULL THEN
-          SELECT conname, pg_get_constraintdef(oid)
-            INTO constraint_name, constraint_def
-          FROM pg_constraint
-          WHERE conrelid = 'exercises'::regclass
-            AND contype = 'c'
-            AND pg_get_constraintdef(oid) LIKE '%type IN%';
-        END IF;
+    CREATE INDEX idx_accounts_user ON accounts(userId);
+    CREATE INDEX idx_sessions_user ON sessions(userId);
 
-        IF constraint_def IS NULL THEN
-          ALTER TABLE exercises
-            ADD CONSTRAINT exercises_type_check CHECK (type IN ('strength', 'cardio', 'endurance', 'stretch', 'counter'));
-        ELSIF constraint_def NOT LIKE '%counter%' THEN
-          EXECUTE format('ALTER TABLE exercises DROP CONSTRAINT %I', constraint_name);
-          ALTER TABLE exercises
-            ADD CONSTRAINT exercises_type_check CHECK (type IN ('strength', 'cardio', 'endurance', 'stretch', 'counter'));
-        END IF;
-      END$$;
-    `);
+    CREATE INDEX idx_exercises_owner_type_name ON exercises(owner_user_id, type, name);
+    CREATE UNIQUE INDEX uq_exercises_builtin_name
+      ON exercises ((lower(name)))
+      WHERE owner_user_id IS NULL AND archived_at IS NULL;
+    CREATE UNIQUE INDEX uq_exercises_user_name
+      ON exercises (owner_user_id, (lower(name)))
+      WHERE owner_user_id IS NOT NULL AND archived_at IS NULL;
 
-    await client.query(`
-      DO $$
-      DECLARE
-        constraint_name TEXT;
-        constraint_def TEXT;
-      BEGIN
-        SELECT conname, pg_get_constraintdef(oid)
-          INTO constraint_name, constraint_def
-        FROM pg_constraint
-        WHERE conrelid = 'exercise_sessions'::regclass
-          AND contype = 'c'
-          AND conname = 'exercise_sessions_type_check';
+    CREATE INDEX idx_templates_owner_updated
+      ON workout_templates(owner_user_id, updated_at DESC)
+      WHERE archived_at IS NULL;
+    CREATE INDEX idx_template_items_template_position ON workout_template_items(template_id, position);
+    CREATE INDEX idx_saved_templates_template ON user_saved_templates(template_id, user_id);
 
-        IF constraint_def IS NULL THEN
-          SELECT conname, pg_get_constraintdef(oid)
-            INTO constraint_name, constraint_def
-          FROM pg_constraint
-          WHERE conrelid = 'exercise_sessions'::regclass
-            AND contype = 'c'
-            AND pg_get_constraintdef(oid) LIKE '%type IN%';
-        END IF;
+    CREATE INDEX idx_workout_sessions_user_started ON workout_sessions(user_id, started_at DESC);
+    CREATE INDEX idx_workout_session_items_session_position ON workout_session_items(workout_session_id, position);
+    CREATE INDEX idx_workout_session_items_user_type ON workout_session_items(user_id, exercise_type);
+    CREATE INDEX idx_workout_session_items_user_exercise ON workout_session_items(user_id, exercise_id);
 
-        IF constraint_def IS NULL THEN
-          ALTER TABLE exercise_sessions
-            ADD CONSTRAINT exercise_sessions_type_check CHECK (type IN ('strength', 'cardio', 'endurance', 'stretch', 'counter'));
-        ELSIF constraint_def NOT LIKE '%counter%' THEN
-          EXECUTE format('ALTER TABLE exercise_sessions DROP CONSTRAINT %I', constraint_name);
-          ALTER TABLE exercise_sessions
-            ADD CONSTRAINT exercise_sessions_type_check CHECK (type IN ('strength', 'cardio', 'endurance', 'stretch', 'counter'));
-        END IF;
-      END$$;
-    `);
+    CREATE INDEX idx_body_entries_user_measured ON body_entries(user_id, measured_at DESC);
+  `);
 
-    // Safe migration: add created_at column if missing (for existing DBs)
-    await client.query(`
-      DO $$
-      BEGIN
-        IF NOT EXISTS (
-          SELECT 1 FROM information_schema.columns
-          WHERE table_name = 'body_measurements' AND column_name = 'created_at'
-        ) THEN
-          ALTER TABLE body_measurements ADD COLUMN created_at TIMESTAMPTZ DEFAULT NOW();
-          CREATE INDEX IF NOT EXISTS idx_body_measurements_user_created ON body_measurements(user_id, created_at DESC);
-        END IF;
-      END$$;
-    `);
+  await client.query(
+    `
+    INSERT INTO app_schema_version (id, version, updated_at)
+    VALUES (1, $1, NOW())
+    ON CONFLICT (id)
+    DO UPDATE SET version = EXCLUDED.version, updated_at = NOW();
+    `,
+    [SCHEMA_VERSION]
+  );
+}
 
-    // Safe migration: add is_archived column for templates
-    await client.query(`
-      DO $$
-      BEGIN
-        IF NOT EXISTS (
-          SELECT 1 FROM information_schema.columns
-          WHERE table_name = 'workout_templates' AND column_name = 'is_archived'
-        ) THEN
-          ALTER TABLE workout_templates ADD COLUMN is_archived BOOLEAN DEFAULT FALSE;
-        END IF;
-      END$$;
-    `);
+async function seedDefaultData(client: PoolClient) {
+  for (const exercise of DEFAULT_EXERCISES) {
+    const existing = await client.query<{ id: string }>(
+      `
+      SELECT id
+      FROM exercises
+      WHERE owner_user_id IS NULL
+        AND archived_at IS NULL
+        AND lower(name) = lower($1)
+      LIMIT 1
+      `,
+      [exercise.name]
+    );
 
-    // Ensure index exists when column already present
-    await client.query(`
-      CREATE INDEX IF NOT EXISTS idx_body_measurements_user_created ON body_measurements(user_id, created_at DESC);
-    `);
-
-    // Safe migrations: add dashboard visibility settings
-    await client.query(`
-      DO $$
-      BEGIN
-        IF NOT EXISTS (
-          SELECT 1 FROM information_schema.columns
-          WHERE table_name = 'user_settings' AND column_name = 'show_recent_workouts'
-        ) THEN
-          ALTER TABLE user_settings ADD COLUMN show_recent_workouts BOOLEAN DEFAULT TRUE;
-        END IF;
-        IF NOT EXISTS (
-          SELECT 1 FROM information_schema.columns
-          WHERE table_name = 'user_settings' AND column_name = 'show_calendar'
-        ) THEN
-          ALTER TABLE user_settings ADD COLUMN show_calendar BOOLEAN DEFAULT TRUE;
-        END IF;
-        IF NOT EXISTS (
-          SELECT 1 FROM information_schema.columns
-          WHERE table_name = 'user_settings' AND column_name = 'show_stats_total_workouts'
-        ) THEN
-          ALTER TABLE user_settings ADD COLUMN show_stats_total_workouts BOOLEAN DEFAULT TRUE;
-        END IF;
-        IF NOT EXISTS (
-          SELECT 1 FROM information_schema.columns
-          WHERE table_name = 'user_settings' AND column_name = 'show_stats_this_week'
-        ) THEN
-          ALTER TABLE user_settings ADD COLUMN show_stats_this_week BOOLEAN DEFAULT TRUE;
-        END IF;
-        IF NOT EXISTS (
-          SELECT 1 FROM information_schema.columns
-          WHERE table_name = 'user_settings' AND column_name = 'show_stats_total_weight'
-        ) THEN
-          ALTER TABLE user_settings ADD COLUMN show_stats_total_weight BOOLEAN DEFAULT TRUE;
-        END IF;
-        IF NOT EXISTS (
-          SELECT 1 FROM information_schema.columns
-          WHERE table_name = 'user_settings' AND column_name = 'show_prs'
-        ) THEN
-          ALTER TABLE user_settings ADD COLUMN show_prs BOOLEAN DEFAULT TRUE;
-        END IF;
-        IF NOT EXISTS (
-          SELECT 1 FROM information_schema.columns
-          WHERE table_name = 'user_settings' AND column_name = 'show_quickstart'
-        ) THEN
-          ALTER TABLE user_settings ADD COLUMN show_quickstart BOOLEAN DEFAULT TRUE;
-        END IF;
-        IF NOT EXISTS (
-          SELECT 1 FROM information_schema.columns
-          WHERE table_name = 'user_settings' AND column_name = 'show_weekly_goal'
-        ) THEN
-          ALTER TABLE user_settings ADD COLUMN show_weekly_goal BOOLEAN DEFAULT TRUE;
-        END IF;
-        IF NOT EXISTS (
-          SELECT 1 FROM information_schema.columns
-          WHERE table_name = 'user_settings' AND column_name = 'dashboard_widget_order'
-        ) THEN
-          ALTER TABLE user_settings ADD COLUMN dashboard_widget_order TEXT DEFAULT '["quickstart","weeklyGoal","stats","prs","calendar","recent"]';
-        END IF;
-      END$$;
-    `);
-
-    await client.query('COMMIT');
-  } catch (error) {
-    await client.query('ROLLBACK');
-    console.error('Error creating tables', error);
-    throw error;
-  } finally {
-    try {
-      await client.query('SELECT pg_advisory_unlock($1)', [lockId]);
-    } catch {
-      // ignore unlock errors so we can release the client
+    if (existing.rows[0]) {
+      continue;
     }
-    client.release();
+
+    await client.query(
+      `
+      INSERT INTO exercises (
+        id,
+        owner_user_id,
+        source_exercise_id,
+        name,
+        type,
+        goal_value,
+        goal_due_date,
+        is_builtin,
+        created_at,
+        updated_at,
+        archived_at
+      ) VALUES ($1, NULL, NULL, $2, $3, NULL, NULL, TRUE, NOW(), NOW(), NULL)
+      `,
+      [uuidv4(), exercise.name, exercise.type]
+    );
   }
 }
 
-async function seedDefaultData() {
-  const client = await pool.connect();
-  try {
-    const { rows } = await client.query('SELECT COUNT(*)::int AS count FROM exercises WHERE user_id IS NULL');
-    if (rows[0].count === 0) {
-      const insertText = `
-        INSERT INTO exercises (id, user_id, name, type, is_default)
-        VALUES ($1, NULL, $2, $3, $4)
-      `;
-      for (const exercise of DEFAULT_EXERCISES) {
-        await client.query(insertText, [uuidv4(), exercise.name, exercise.type, exercise.isDefault]);
-      }
-    }
-  } finally {
-    client.release();
-  }
-}
-
-export async function query<T extends QueryResultRow = QueryResultRow>(text: string, params?: any[]): Promise<QueryResult<T>> {
+export async function query<T extends QueryResultRow = QueryResultRow>(
+  text: string,
+  params?: any[]
+): Promise<QueryResult<T>> {
   await initDatabase();
   return pool.query<T>(text, params);
 }
 
-export function parseJson<T>(jsonString: string | null): T | null {
-  if (jsonString === null || jsonString === undefined) return null;
-  // If already parsed (e.g., JSON/JSONB from pg), return as-is
-  if (typeof jsonString === 'object') {
-    return jsonString as unknown as T;
+export function parseJson<T>(jsonValue: unknown): T | null {
+  if (jsonValue === null || jsonValue === undefined) return null;
+  if (typeof jsonValue === 'object') {
+    return jsonValue as T;
   }
+  if (typeof jsonValue !== 'string') return null;
+
   try {
-    return JSON.parse(jsonString) as T;
+    return JSON.parse(jsonValue) as T;
   } catch {
     return null;
   }
 }
 
-export function stringifyJson(obj: any): string | null {
+export function stringifyJson(obj: unknown): string | null {
   if (obj === null || obj === undefined) return null;
   try {
     return JSON.stringify(obj);

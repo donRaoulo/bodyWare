@@ -22,15 +22,15 @@ export async function GET() {
       `
       SELECT
         wt.*,
-        STRING_AGG(te.exercise_id, ',') AS exercise_ids,
+        ARRAY_REMOVE(ARRAY_AGG(wti.exercise_id ORDER BY wti.position), NULL) AS exercise_ids,
         (
-          SELECT MAX(ws.date)
+          SELECT MAX(ws.started_at)
           FROM workout_sessions ws
-          WHERE ws.template_id = wt.id AND ws.user_id = wt.user_id
+          WHERE ws.template_id = wt.id AND ws.user_id = wt.owner_user_id
         ) AS last_used_at
       FROM workout_templates wt
-      LEFT JOIN template_exercises te ON wt.id = te.template_id AND te.user_id = wt.user_id
-      WHERE wt.user_id = $1 AND wt.is_archived = FALSE
+      LEFT JOIN workout_template_items wti ON wt.id = wti.template_id
+      WHERE wt.owner_user_id = $1 AND wt.archived_at IS NULL
       GROUP BY wt.id
       ORDER BY wt.updated_at DESC
     `,
@@ -39,9 +39,9 @@ export async function GET() {
 
     const templates = rows.map((row) => ({
       id: row.id,
-      userId: row.user_id,
+      userId: row.owner_user_id,
       name: row.name,
-      exerciseIds: row.exercise_ids ? row.exercise_ids.split(',') : [],
+      exerciseIds: Array.isArray(row.exercise_ids) ? row.exercise_ids : [],
       createdAt: new Date(row.created_at),
       updatedAt: new Date(row.updated_at),
       lastUsedAt: row.last_used_at ? new Date(row.last_used_at) : undefined,
@@ -102,7 +102,7 @@ export async function POST(request: NextRequest) {
     // Insert template
     await query(
       `
-      INSERT INTO workout_templates (id, user_id, name, created_at, updated_at)
+      INSERT INTO workout_templates (id, owner_user_id, name, created_at, updated_at)
       VALUES ($1, $2, $3, $4, $5)
     `,
       [templateId, userId, name.trim(), now, now]
@@ -113,10 +113,10 @@ export async function POST(request: NextRequest) {
       const exerciseId = exerciseIds[index];
       await query(
         `
-        INSERT INTO template_exercises (id, user_id, template_id, exercise_id, order_index)
-        VALUES ($1, $2, $3, $4, $5)
+        INSERT INTO workout_template_items (id, template_id, exercise_id, position)
+        VALUES ($1, $2, $3, $4)
       `,
-        [uuidv4(), userId, templateId, exerciseId, index]
+        [uuidv4(), templateId, exerciseId, index]
       );
     }
 
@@ -125,10 +125,10 @@ export async function POST(request: NextRequest) {
       `
       SELECT
         wt.*,
-        STRING_AGG(te.exercise_id, ',') AS exercise_ids
+        ARRAY_REMOVE(ARRAY_AGG(wti.exercise_id ORDER BY wti.position), NULL) AS exercise_ids
       FROM workout_templates wt
-      LEFT JOIN template_exercises te ON wt.id = te.template_id AND te.user_id = wt.user_id
-      WHERE wt.id = $1 AND wt.user_id = $2
+      LEFT JOIN workout_template_items wti ON wt.id = wti.template_id
+      WHERE wt.id = $1 AND wt.owner_user_id = $2
       GROUP BY wt.id
     `,
       [templateId, userId]
@@ -138,9 +138,9 @@ export async function POST(request: NextRequest) {
 
     const responseTemplate: WorkoutTemplate = {
       id: template.id,
-      userId: template.user_id,
+      userId: template.owner_user_id,
       name: template.name,
-      exerciseIds: template.exercise_ids ? template.exercise_ids.split(',') : [],
+      exerciseIds: Array.isArray(template.exercise_ids) ? template.exercise_ids : [],
       createdAt: new Date(template.created_at),
       updatedAt: new Date(template.updated_at),
     };

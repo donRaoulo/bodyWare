@@ -26,15 +26,15 @@ export async function GET(
       `
       SELECT
         wt.*,
-        STRING_AGG(te.exercise_id, ',') AS exercise_ids,
+        ARRAY_REMOVE(ARRAY_AGG(wti.exercise_id ORDER BY wti.position), NULL) AS exercise_ids,
         (
-          SELECT MAX(ws.date)
+          SELECT MAX(ws.started_at)
           FROM workout_sessions ws
-          WHERE ws.template_id = wt.id AND ws.user_id = wt.user_id
+          WHERE ws.template_id = wt.id AND ws.user_id = wt.owner_user_id
         ) AS last_used_at
       FROM workout_templates wt
-      LEFT JOIN template_exercises te ON wt.id = te.template_id AND te.user_id = wt.user_id
-      WHERE wt.id = $1 AND wt.user_id = $2 AND wt.is_archived = FALSE
+      LEFT JOIN workout_template_items wti ON wt.id = wti.template_id
+      WHERE wt.id = $1 AND wt.owner_user_id = $2 AND wt.archived_at IS NULL
       GROUP BY wt.id
     `,
       [id, userId]
@@ -51,9 +51,9 @@ export async function GET(
 
     const responseTemplate: WorkoutTemplate = {
       id: template.id,
-      userId: template.user_id,
+      userId: template.owner_user_id,
       name: template.name,
-      exerciseIds: template.exercise_ids ? template.exercise_ids.split(',') : [],
+      exerciseIds: Array.isArray(template.exercise_ids) ? template.exercise_ids : [],
       createdAt: new Date(template.created_at),
       updatedAt: new Date(template.updated_at),
       lastUsedAt: template.last_used_at ? new Date(template.last_used_at) : undefined,
@@ -114,7 +114,7 @@ export async function PUT(
 
     // Check if template exists
     const existingTemplate = await query<{ id: string }>(
-      'SELECT id FROM workout_templates WHERE id = $1 AND user_id = $2 AND is_archived = FALSE',
+      'SELECT id FROM workout_templates WHERE id = $1 AND owner_user_id = $2 AND archived_at IS NULL',
       [id, userId]
     );
     if (!existingTemplate.rows[0]) {
@@ -131,23 +131,23 @@ export async function PUT(
       `
       UPDATE workout_templates
       SET name = $1, updated_at = $2
-      WHERE id = $3 AND user_id = $4
+      WHERE id = $3 AND owner_user_id = $4
     `,
       [name.trim(), now, id, userId]
     );
 
     // Remove existing exercise associations
-    await query('DELETE FROM template_exercises WHERE template_id = $1 AND user_id = $2', [id, userId]);
+    await query('DELETE FROM workout_template_items WHERE template_id = $1', [id]);
 
     // Insert new exercise associations
     for (let index = 0; index < exerciseIds.length; index++) {
       const exerciseId = exerciseIds[index];
       await query(
         `
-        INSERT INTO template_exercises (id, user_id, template_id, exercise_id, order_index)
-        VALUES ($1, $2, $3, $4, $5)
+        INSERT INTO workout_template_items (id, template_id, exercise_id, position)
+        VALUES ($1, $2, $3, $4)
       `,
-        [uuidv4(), userId, id, exerciseId, index]
+        [uuidv4(), id, exerciseId, index]
       );
     }
 
@@ -156,10 +156,10 @@ export async function PUT(
       `
       SELECT
         wt.*,
-        STRING_AGG(te.exercise_id, ',') AS exercise_ids
+        ARRAY_REMOVE(ARRAY_AGG(wti.exercise_id ORDER BY wti.position), NULL) AS exercise_ids
       FROM workout_templates wt
-      LEFT JOIN template_exercises te ON wt.id = te.template_id AND te.user_id = wt.user_id
-      WHERE wt.id = $1 AND wt.user_id = $2
+      LEFT JOIN workout_template_items wti ON wt.id = wti.template_id
+      WHERE wt.id = $1 AND wt.owner_user_id = $2
       GROUP BY wt.id
     `,
       [id, userId]
@@ -169,9 +169,9 @@ export async function PUT(
 
     const responseTemplate: WorkoutTemplate = {
       id: template.id,
-      userId: template.user_id,
+      userId: template.owner_user_id,
       name: template.name,
-      exerciseIds: template.exercise_ids ? template.exercise_ids.split(',') : [],
+      exerciseIds: Array.isArray(template.exercise_ids) ? template.exercise_ids : [],
       createdAt: new Date(template.created_at),
       updatedAt: new Date(template.updated_at),
     };
@@ -208,7 +208,7 @@ export async function DELETE(
 
     // Check if template exists
     const existingTemplate = await query<{ id: string }>(
-      'SELECT id FROM workout_templates WHERE id = $1 AND user_id = $2 AND is_archived = FALSE',
+      'SELECT id FROM workout_templates WHERE id = $1 AND owner_user_id = $2 AND archived_at IS NULL',
       [id, userId]
     );
     if (!existingTemplate.rows[0]) {
@@ -219,7 +219,7 @@ export async function DELETE(
     }
 
     await query(
-      'UPDATE workout_templates SET is_archived = TRUE, updated_at = $1 WHERE id = $2 AND user_id = $3',
+      'UPDATE workout_templates SET archived_at = $1, updated_at = $1 WHERE id = $2 AND owner_user_id = $3',
       [new Date().toISOString(), id, userId]
     );
 

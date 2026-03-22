@@ -19,7 +19,7 @@ export async function GET() {
       `
       SELECT * FROM workout_sessions
       WHERE user_id = $1
-      ORDER BY date DESC
+      ORDER BY started_at DESC
     `,
       [userId]
     );
@@ -44,9 +44,9 @@ export async function GET() {
       // Fetch exercise sessions for this workout
       const exerciseResult = await query<any>(
         `
-        SELECT * FROM exercise_sessions
+        SELECT * FROM workout_session_items
         WHERE workout_session_id = $1 AND user_id = $2
-        ORDER BY id
+        ORDER BY position ASC, id ASC
       `,
         [sessionRow.id, userId]
       );
@@ -54,7 +54,7 @@ export async function GET() {
 
       if (exerciseSessions.length === 0) {
         csvContent += [
-          format(new Date(sessionRow.date), 'yyyy-MM-dd'),
+          format(new Date(sessionRow.started_at), 'yyyy-MM-dd'),
           `"${sessionRow.template_name}"`,
           '',
           '',
@@ -66,58 +66,42 @@ export async function GET() {
       for (const exercise of exerciseSessions) {
         let details = '';
 
+        const payload = parseJson<Record<string, any>>(exercise.payload) ?? {};
+
         // Format exercise details based on type
-        switch (exercise.type) {
+        switch (exercise.exercise_type) {
           case 'strength': {
-            const strengthData = parseJson<{ sets?: Array<{ weight?: number; reps?: number }> }>(
-              exercise.strength_data
-            );
-            if (Array.isArray(strengthData?.sets) && strengthData.sets.length > 0) {
-              details = strengthData.sets
-                .map((set) => `${set.weight ?? 0}kg x ${set.reps ?? 0}`)
+            const sets = Array.isArray(payload.sets) ? payload.sets : [];
+            if (sets.length > 0) {
+              details = sets
+                .map((set: { weight?: number; reps?: number }) => `${set.weight ?? 0}kg x ${set.reps ?? 0}`)
                 .join(', ');
             }
             break;
           }
           case 'cardio': {
-            const cardioData = parseJson<{ time?: number; level?: number; distance?: number }>(
-              exercise.cardio_data
-            );
-            if (cardioData) {
-              details = `${cardioData.time ?? 0}min, Level ${cardioData.level ?? 0}, ${cardioData.distance ?? 0}km`;
-            }
+            details = `${payload.time ?? 0}min, Level ${payload.level ?? 0}, ${payload.distance ?? 0}km`;
             break;
           }
           case 'endurance': {
-            const enduranceData = parseJson<{ time?: number; distance?: number; pace?: number }>(
-              exercise.endurance_data
-            );
-            if (enduranceData) {
-              details = `${enduranceData.time ?? 0}min, ${enduranceData.distance ?? 0}km, ${enduranceData.pace ?? 0}min/km`;
-            }
+            details = `${payload.time ?? 0}min, ${payload.distance ?? 0}km, ${payload.pace ?? 0}min/km`;
             break;
           }
           case 'stretch': {
-            const stretchData = parseJson<{ completed?: boolean }>(exercise.stretch_data);
-            if (stretchData) {
-              details = stretchData.completed ? 'Completed' : 'Not completed';
-            }
+            details = payload.completed ? 'Completed' : 'Not completed';
             break;
           }
           case 'counter': {
-            const counterData = parseJson<{ value?: number }>(exercise.counter_data);
-            if (counterData) {
-              details = `${counterData.value ?? 0}`;
-            }
+            details = `${payload.value ?? 0}`;
             break;
           }
         }
 
         csvContent += [
-          format(new Date(sessionRow.date), 'yyyy-MM-dd'),
+          format(new Date(sessionRow.started_at), 'yyyy-MM-dd'),
           `"${sessionRow.template_name}"`,
           `"${exercise.exercise_name}"`,
-          exercise.type,
+          exercise.exercise_type,
           `"${details}"`
         ].join(',') + '\n';
       }

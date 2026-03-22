@@ -28,11 +28,11 @@ export async function GET() {
         exercise_id,
         exercise_name,
         MAX((set_item->>'weight')::numeric) AS max_weight
-      FROM exercise_sessions
-      CROSS JOIN LATERAL jsonb_array_elements(strength_data->'sets') AS set_item
+      FROM workout_session_items
+      CROSS JOIN LATERAL jsonb_array_elements(payload->'sets') AS set_item
       WHERE user_id = $1
-        AND type = 'strength'
-        AND strength_data IS NOT NULL
+        AND exercise_type = 'strength'
+        AND payload IS NOT NULL
         AND (set_item->>'weight') IS NOT NULL
         AND (set_item->>'weight') <> ''
       GROUP BY exercise_id, exercise_name

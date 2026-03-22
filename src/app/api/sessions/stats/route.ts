@@ -40,7 +40,7 @@ export async function GET() {
     const thisWeekWorkoutsResult = await query<{ count: string }>(
       `
       SELECT COUNT(*)::int AS count FROM workout_sessions
-      WHERE user_id = $1 AND date BETWEEN $2 AND $3
+      WHERE user_id = $1 AND started_at BETWEEN $2 AND $3
     `,
       [userId, startOfWeek.toISOString(), endOfWeek.toISOString()]
     );
@@ -48,15 +48,17 @@ export async function GET() {
     // Sum all lifted weight across strength exercises (sum of weight*reps per set)
     const strengthRows = await query<any>(
       `
-      SELECT strength_data FROM exercise_sessions
-      WHERE user_id = $1 AND strength_data IS NOT NULL
+      SELECT payload FROM workout_session_items
+      WHERE user_id = $1
+        AND exercise_type = 'strength'
+        AND payload IS NOT NULL
     `,
       [userId]
     );
 
     let totalWeightKg = 0;
     for (const row of strengthRows.rows) {
-      const data = parseJson<{ sets?: { weight?: number; reps?: number }[] }>(row.strength_data);
+      const data = parseJson<{ sets?: { weight?: number; reps?: number }[] }>(row.payload);
       if (data?.sets?.length) {
         for (const set of data.sets) {
           const w = set.weight ?? 0;

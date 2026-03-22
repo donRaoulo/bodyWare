@@ -3,6 +3,7 @@ import { query } from '../../../../lib/database';
 import { BodyMeasurement, ApiResponse } from '../../../../lib/types';
 import { getServerSession } from 'next-auth/next';
 import { authOptions } from '../../../../lib/auth';
+import { fromBodyEntryRow } from '../../../../lib/body-entries';
 
 // GET /api/measurements/[id] - Fetch specific measurement
 export async function GET(
@@ -21,7 +22,7 @@ export async function GET(
     const userId = session.user.id;
     const { id } = await params;
 
-    const result = await query<any>('SELECT * FROM body_measurements WHERE id = $1 AND user_id = $2', [id, userId]);
+    const result = await query<any>('SELECT * FROM body_entries WHERE id = $1 AND user_id = $2', [id, userId]);
     const measurement = result.rows[0];
 
     if (!measurement) {
@@ -31,19 +32,7 @@ export async function GET(
       }, { status: 404 });
     }
 
-    const responseMeasurement: BodyMeasurement = {
-      id: measurement.id,
-      userId: measurement.user_id,
-      date: new Date(measurement.date),
-      weight: measurement.weight || undefined,
-      chest: measurement.chest || undefined,
-      waist: measurement.waist || undefined,
-      hips: measurement.hips || undefined,
-      upperArm: measurement.upper_arm || undefined,
-      forearm: measurement.forearm || undefined,
-      thigh: measurement.thigh || undefined,
-      calf: measurement.calf || undefined,
-    };
+    const responseMeasurement: BodyMeasurement = fromBodyEntryRow(measurement);
 
     return NextResponse.json<ApiResponse<BodyMeasurement>>({
       success: true,
@@ -77,7 +66,7 @@ export async function DELETE(
 
     // Check if measurement exists
     const existingMeasurement = await query<{ id: string }>(
-      'SELECT id FROM body_measurements WHERE id = $1 AND user_id = $2',
+      'SELECT id FROM body_entries WHERE id = $1 AND user_id = $2',
       [id, userId]
     );
     if (!existingMeasurement.rows[0]) {
@@ -88,7 +77,7 @@ export async function DELETE(
     }
 
     // Delete measurement
-    await query('DELETE FROM body_measurements WHERE id = $1 AND user_id = $2', [id, userId]);
+    await query('DELETE FROM body_entries WHERE id = $1 AND user_id = $2', [id, userId]);
 
     return NextResponse.json<ApiResponse<null>>({
       success: true,

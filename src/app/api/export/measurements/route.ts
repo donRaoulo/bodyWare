@@ -3,6 +3,7 @@ import { query } from '../../../../lib/database';
 import { format } from 'date-fns';
 import { getServerSession } from 'next-auth/next';
 import { authOptions } from '../../../../lib/auth';
+import { fromBodyEntryRow } from '../../../../lib/body-entries';
 
 // GET /api/export/measurements - Export body measurements as CSV
 export async function GET() {
@@ -17,13 +18,13 @@ export async function GET() {
     // Fetch all body measurements
     const result = await query<any>(
       `
-      SELECT * FROM body_measurements
+      SELECT * FROM body_entries
       WHERE user_id = $1
-      ORDER BY date DESC
+      ORDER BY measured_at DESC
     `,
       [userId]
     );
-    const measurements = result.rows;
+    const measurements = result.rows.map(fromBodyEntryRow);
 
     if (measurements.length === 0) {
       return new Response('No measurements to export', { status: 404 });
@@ -51,7 +52,7 @@ export async function GET() {
         measurement.chest || '',
         measurement.waist || '',
         measurement.hips || '',
-        measurement.upper_arm || '',
+        measurement.upperArm || '',
         measurement.forearm || '',
         measurement.thigh || '',
         measurement.calf || ''

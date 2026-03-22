@@ -22,8 +22,18 @@ export async function GET(request: NextRequest) {
     const search = searchParams.get('search');
 
     let sql = `
-      SELECT * FROM exercises
-      WHERE (user_id = $1 OR (user_id IS NULL AND is_default = true))
+      SELECT
+        id,
+        owner_user_id AS user_id,
+        name,
+        type,
+        goal_value AS goal,
+        goal_due_date,
+        created_at,
+        is_builtin
+      FROM exercises
+      WHERE archived_at IS NULL
+        AND (owner_user_id = $1 OR (owner_user_id IS NULL AND is_builtin = true))
     `;
     const params: any[] = [userId];
 
@@ -37,7 +47,7 @@ export async function GET(request: NextRequest) {
       params.push(`%${search}%`);
     }
 
-    sql += ' ORDER BY is_default DESC, name ASC';
+    sql += ' ORDER BY is_builtin DESC, name ASC';
 
     const { rows } = await query<any>(sql, params);
     const exercises = rows.map((row) => ({
@@ -48,7 +58,7 @@ export async function GET(request: NextRequest) {
       goal: row.goal ?? null,
       goalDueDate: row.goal_due_date ?? null,
       createdAt: new Date(row.created_at),
-      isDefault: Boolean(row.is_default),
+      isDefault: Boolean(row.is_builtin),
     })) as Exercise[];
 
     return NextResponse.json<ApiResponse<Exercise[]>>({
@@ -123,7 +133,13 @@ export async function POST(request: NextRequest) {
 
     // Check if exercise with same name already exists
     const existing = await query<{ id: string }>(
-      'SELECT id FROM exercises WHERE (user_id = $1 OR user_id IS NULL) AND name = $2',
+      `
+      SELECT id
+      FROM exercises
+      WHERE archived_at IS NULL
+        AND (owner_user_id = $1 OR owner_user_id IS NULL)
+        AND lower(name) = lower($2)
+      `,
       [userId, name.trim()]
     );
     if (existing.rows[0]) {
@@ -138,13 +154,38 @@ export async function POST(request: NextRequest) {
 
     await query(
       `
-      INSERT INTO exercises (id, user_id, name, type, goal, goal_due_date, is_default, created_at)
-      VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+      INSERT INTO exercises (
+        id,
+        owner_user_id,
+        name,
+        type,
+        goal_value,
+        goal_due_date,
+        is_builtin,
+        created_at,
+        updated_at
+      )
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $8)
     `,
       [id, userId, name.trim(), type, type === 'counter' ? normalizedGoal : null, type === 'counter' ? normalizedGoalDueDate : null, false, now]
     );
 
-    const exerciseResult = await query<any>('SELECT * FROM exercises WHERE id = $1', [id]);
+    const exerciseResult = await query<any>(
+      `
+      SELECT
+        id,
+        owner_user_id AS user_id,
+        name,
+        type,
+        goal_value AS goal,
+        goal_due_date,
+        created_at,
+        is_builtin
+      FROM exercises
+      WHERE id = $1
+      `,
+      [id]
+    );
     const exercise = exerciseResult.rows[0];
 
     const responseExercise: Exercise = {
@@ -155,7 +196,7 @@ export async function POST(request: NextRequest) {
       goal: exercise.goal ?? null,
       goalDueDate: exercise.goal_due_date ?? null,
       createdAt: new Date(exercise.created_at),
-      isDefault: Boolean(exercise.is_default),
+      isDefault: Boolean(exercise.is_builtin),
     };
 
     return NextResponse.json<ApiResponse<Exercise>>({
