@@ -167,7 +167,7 @@ export default function EditTrainingTemplatePage() {
   return (
     <Box sx={{ maxWidth: 900, mx: 'auto', pt: { xs: 2, md: 6 } }}>
       <Typography variant="h4" component="h1" gutterBottom>
-        Template bearbeiten
+        Workout bearbeiten
       </Typography>
 
       {error && (
@@ -179,7 +179,7 @@ export default function EditTrainingTemplatePage() {
       <Card>
         <CardContent>
           {loading ? (
-            <Typography>Lade Template...</Typography>
+            <Typography>Lade Workout...</Typography>
           ) : (
             <form onSubmit={handleSubmit}>
               <Stack spacing={2}>

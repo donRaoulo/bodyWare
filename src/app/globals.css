@@ -22,5 +22,25 @@
 body {
   background: var(--background);
   color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  font-family: var(--font-geist-sans), "Avenir Next", "Segoe UI", sans-serif;
+  text-rendering: optimizeLegibility;
+}
+
+@keyframes ff-fade-up {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.ff-reveal {
+  animation: ff-fade-up 380ms ease both;
+}
+
+.ff-reveal-delay {
+  animation: ff-fade-up 520ms ease both;
 }

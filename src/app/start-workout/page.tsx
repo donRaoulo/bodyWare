@@ -461,9 +461,14 @@ export default function StartWorkoutPage() {
 
   return (
     <Box sx={{ maxWidth: 800, mx: 'auto', pt: { xs: 2, md: 6 } }}>
-      <Typography variant="h4" component="h1" gutterBottom>
-        Workout erfassen
-      </Typography>
+      <Box className="ff-reveal" sx={{ mb: 1.5 }}>
+        <Typography variant="h4" component="h1" gutterBottom>
+          Workout erfassen
+        </Typography>
+        <Typography variant="body2" color="text.secondary">
+          Trage die Uebungen ein und speichere dein Workout am Ende in einem Schritt.
+        </Typography>
+      </Box>
 
       {error && (
         <Alert severity="error" sx={{ mb: 2 }}>
@@ -471,7 +476,7 @@ export default function StartWorkoutPage() {
         </Alert>
       )}
 
-      <Card>
+      <Card className="ff-reveal-delay">
         <CardContent>
           {loading ? (
             <Typography>Lade Workout...</Typography>
@@ -480,7 +485,7 @@ export default function StartWorkoutPage() {
               <Typography variant="h6" gutterBottom>
                 {template.name}
               </Typography>
-              <Card variant="outlined" sx={{ mb: 2 }}>
+              <Card variant="outlined" sx={{ mb: 2, borderStyle: 'dashed' }}>
                 <CardContent sx={{ py: 1.5 }}>
                   <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 1 }}>
                     <Typography variant="subtitle2">Fortschritt</Typography>
@@ -525,7 +530,7 @@ export default function StartWorkoutPage() {
                         alignItems: 'stretch',
                         border: 1,
                         borderColor: isSaved ? 'action.disabled' : 'divider',
-                        borderRadius: 1,
+                        borderRadius: 2,
                         px: 1,
                         py: 1,
                         opacity: isSaved ? 0.6 : 1,
@@ -834,7 +839,7 @@ export default function StartWorkoutPage() {
                     Naechste offene Uebung
                   </Button>
                 )}
-                <Button variant="outlined" onClick={() => requestNavigation('/trainings')}>
+                <Button variant="text" onClick={() => requestNavigation('/trainings')}>
                   Zurueck
                 </Button>
                 <Button variant="contained" onClick={startWorkout} disabled={starting || !savedExercisesCount}>

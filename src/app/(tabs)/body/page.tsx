@@ -123,17 +123,32 @@ export default function BodyPage() {
 
   return (
     <Box>
-      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 4 }}>
-        <Typography variant="h4" component="h1">
-          Koerpermessungen
-        </Typography>
+      <Box
+        className="ff-reveal"
+        sx={{
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: { xs: 'flex-start', sm: 'center' },
+          flexDirection: { xs: 'column', sm: 'row' },
+          gap: 1,
+          mb: 3,
+        }}
+      >
+        <Box>
+          <Typography variant="h4" component="h1">
+            Koerperdaten
+          </Typography>
+          <Typography variant="body2" color="text.secondary">
+            Halte Gewicht und Umfaenge fest, um deinen Fortschritt klar zu sehen.
+          </Typography>
+        </Box>
         <Button
           variant="contained"
           size="small"
           startIcon={<AddIcon />}
           href="/measurements/create"
         >
-          New
+          Messung erfassen
         </Button>
       </Box>
 

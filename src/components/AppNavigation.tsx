@@ -103,9 +103,16 @@ export function AppNavigation() {
         }}
         sx={{
           position: 'fixed',
-          bottom: 0,
-          left: 0,
-          right: 0,
+          bottom: 8,
+          left: 8,
+          right: 8,
+          maxWidth: 560,
+          mx: 'auto',
+          borderRadius: 4,
+          overflow: 'hidden',
+          border: '1px solid',
+          borderColor: 'divider',
+          backdropFilter: 'blur(8px)',
           zIndex: theme.zIndex.appBar,
         }}
       >
@@ -118,6 +125,9 @@ export function AppNavigation() {
             sx={{
               '&.Mui-selected': {
                 color: theme.palette.primary.main,
+                '& .MuiSvgIcon-root': {
+                  transform: 'translateY(-1px)',
+                },
               },
               '& .MuiBottomNavigationAction-label': {
                 fontSize: '0.75rem',
@@ -125,6 +135,9 @@ export function AppNavigation() {
                   fontSize: '0.875rem',
                   fontWeight: 600,
                 },
+              },
+              '& .MuiSvgIcon-root': {
+                transition: 'transform 180ms ease',
               },
             }}
           />
@@ -138,7 +151,12 @@ export function AppNavigation() {
     <>
       <AppBar position="fixed" sx={{ zIndex: theme.zIndex.drawer + 1 }}>
         <Toolbar>
-          <Typography variant="h6" noWrap component="div" sx={{ flexGrow: 1 }}>
+          <Typography
+            variant="h6"
+            noWrap
+            component="div"
+            sx={{ flexGrow: 1, fontWeight: 700, letterSpacing: '-0.01em' }}
+          >
             BodyWare
           </Typography>
           <Box sx={{ display: 'flex', gap: 1 }}>
@@ -151,10 +169,14 @@ export function AppNavigation() {
                   onClick={() => handleNavigation(item.href)}
                   startIcon={item.icon}
                   sx={{
+                    borderRadius: 3,
+                    px: 1.5,
                     backgroundColor: isActive ? 'primary.main' : 'transparent',
-                    color: isActive ? 'white' : 'inherit',
+                    color: isActive ? 'white' : 'text.primary',
+                    border: isActive ? 'none' : '1px solid',
+                    borderColor: isActive ? 'transparent' : 'divider',
                     '&:hover': {
-                      backgroundColor: isActive ? 'primary.dark' : 'primary.main',
+                      backgroundColor: isActive ? 'primary.dark' : 'action.hover',
                     },
                   }}
                 >

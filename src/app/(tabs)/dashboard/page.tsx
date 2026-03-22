@@ -166,10 +166,31 @@ export default function DashboardPage() {
 
   return (
     <Box>
-      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 4 }}>
-        <Typography variant="h4" component="h1">
-          Dashboard
-        </Typography>
+      <Box
+        className="ff-reveal"
+        sx={{
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: { xs: 'flex-start', sm: 'center' },
+          flexDirection: { xs: 'column', sm: 'row' },
+          gap: 1,
+          mb: 3,
+        }}
+      >
+        <Box>
+          <Typography variant="h4" component="h1">
+            Dashboard
+          </Typography>
+          <Typography variant="body2" color="text.secondary">
+            Fokus auf die naechsten Schritte und deine aktuelle Trainingswoche.
+          </Typography>
+        </Box>
+        {dashboardSettings.showWeeklyGoal && (
+          <Chip
+            color={workoutsToGoal === 0 ? 'success' : 'primary'}
+            label={workoutsToGoal === 0 ? 'Wochenziel erreicht' : `${workoutsToGoal} Workout${workoutsToGoal === 1 ? '' : 's'} bis Ziel`}
+          />
+        )}
       </Box>
 
       {error && (
@@ -181,7 +202,7 @@ export default function DashboardPage() {
       {(() => {
         const widgets: Record<string, React.ReactNode> = {
           quickstart: dashboardSettings.showQuickstart ? (
-            <Card sx={{ mb: 3 }}>
+            <Card className="ff-reveal-delay" sx={{ mb: 3 }}>
               <CardContent>
                 <Typography variant="h6" gutterBottom>
                   Schnellstart
@@ -193,10 +214,10 @@ export default function DashboardPage() {
                   <Button variant="contained" startIcon={<FitnessIcon />} component={Link} href="/trainings">
                     Workout starten
                   </Button>
-                  <Button variant="outlined" startIcon={<AddIcon />} component={Link} href="/trainings/create">
+                  <Button variant="text" startIcon={<AddIcon />} component={Link} href="/trainings/create">
                     Workout anlegen
                   </Button>
-                  <Button variant="outlined" startIcon={<AddIcon />} component={Link} href="/measurements/create">
+                  <Button variant="text" startIcon={<AddIcon />} component={Link} href="/measurements/create">
                     Messung eintragen
                   </Button>
                 </Box>
@@ -205,6 +226,7 @@ export default function DashboardPage() {
           ) : null,
           weeklyGoal: dashboardSettings.showWeeklyGoal ? (
             <Card
+              className="ff-reveal-delay"
               sx={{
                 mb: 3,
                 background: (theme) =>
@@ -230,7 +252,7 @@ export default function DashboardPage() {
                   value={weeklyProgress}
                   sx={{ height: 10, borderRadius: 999, mb: 1.5 }}
                 />
-                <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 2 }}>
+                <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 2, flexWrap: 'wrap' }}>
                   <Typography variant="body2" color="text.secondary">
                     {workoutsToGoal === 0
                       ? 'Stark. Optional: extra Session fuer ein neues PR.'
@@ -251,7 +273,7 @@ export default function DashboardPage() {
             dashboardSettings.showStatsTotalWeight ? (
               <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', sm: 'repeat(3, 1fr)' }, gap: 3, mb: 4 }}>
                 {dashboardSettings.showStatsTotalWorkouts && (
-                  <Card>
+                  <Card className="ff-reveal">
                     <CardContent>
                       <Box sx={{ display: 'flex', alignItems: 'center', mb: 1 }}>
                         <FitnessIcon color="primary" sx={{ mr: 1 }} />
@@ -267,7 +289,7 @@ export default function DashboardPage() {
                 )}
 
                 {dashboardSettings.showStatsThisWeek && (
-                  <Card>
+                  <Card className="ff-reveal">
                     <CardContent>
                       <Box sx={{ display: 'flex', alignItems: 'center', mb: 1 }}>
                         <TrendingIcon color="success" sx={{ mr: 1 }} />
@@ -283,7 +305,7 @@ export default function DashboardPage() {
                 )}
 
                 {dashboardSettings.showStatsTotalWeight && (
-                  <Card>
+                  <Card className="ff-reveal">
                     <CardContent>
                       <Box sx={{ display: 'flex', alignItems: 'center', mb: 1 }}>
                         <FitnessIcon color="warning" sx={{ mr: 1 }} />
@@ -303,7 +325,7 @@ export default function DashboardPage() {
               </Box>
             ) : null,
           prs: dashboardSettings.showPrs ? (
-            <Card sx={{ mb: 3 }}>
+            <Card className="ff-reveal" sx={{ mb: 3 }}>
               <CardContent>
                 <Typography variant="h6" gutterBottom>
                   Bestleistungen
@@ -348,7 +370,7 @@ export default function DashboardPage() {
             />
           ) : null,
           recent: dashboardSettings.showRecentWorkouts ? (
-            <Card>
+            <Card className="ff-reveal">
               <CardContent>
                 <Typography variant="h6" gutterBottom>
                   Letzte Workouts
@@ -385,8 +407,13 @@ export default function DashboardPage() {
                         sx={{
                           border: 1,
                           borderColor: 'divider',
-                          borderRadius: 1,
+                          borderRadius: 2,
                           mb: 1,
+                          transition: 'transform 160ms ease, border-color 160ms ease',
+                          '&:hover': {
+                            transform: 'translateY(-1px)',
+                            borderColor: 'primary.main',
+                          },
                           '&:last-child': { mb: 0 },
                         }}
                       >

@@ -132,17 +132,34 @@ export default function TrainingsPage() {
 
   return (
     <Box>
-      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 4 }}>
-        <Typography variant="h4" component="h1">
-          Workouts
-        </Typography>
+      <Box
+        className="ff-reveal"
+        sx={{
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: { xs: 'flex-start', sm: 'center' },
+          flexDirection: { xs: 'column', sm: 'row' },
+          gap: 1,
+          mb: 3,
+        }}
+      >
+        <Box>
+          <Typography variant="h4" component="h1">
+            Workouts
+          </Typography>
+          <Typography variant="body2" color="text.secondary">
+            Waehle ein Workout und starte mit einem Tap.
+          </Typography>
+        </Box>
         <Button
           variant="contained"
           size="small"
           startIcon={<AddIcon />}
           component={Link}
           href="/trainings/create"
-        >Neuer Plan</Button>
+        >
+          Neues Workout
+        </Button>
       </Box>
 
       {error && (
@@ -152,7 +169,7 @@ export default function TrainingsPage() {
       )}
 
       {templates.length === 0 ? (
-        <Card>
+        <Card className="ff-reveal-delay">
           <CardContent sx={{ textAlign: 'center', py: 6 }}>
             <FitnessIcon sx={{ fontSize: 64, color: 'text.secondary', mb: 2 }} />
             <Typography variant="h5" gutterBottom>
@@ -177,7 +194,17 @@ export default function TrainingsPage() {
           {templates.map((template) => {
             const exerciseNames = getExerciseNames(template);
             return (
-              <Card key={template.id} sx={{ width: '100%', display: 'flex', flexDirection: 'column' }}>
+              <Card
+                key={template.id}
+                className="ff-reveal"
+                sx={{
+                  width: '100%',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  transition: 'transform 180ms ease',
+                  '&:hover': { transform: 'translateY(-2px)' },
+                }}
+              >
                 <CardContent sx={{ flex: 1 }}>
                   <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', mb: 2 }}>
                     <Typography variant="h6" component="h2" sx={{ flex: 1 }}>
@@ -220,15 +247,17 @@ export default function TrainingsPage() {
                   </Typography>
                 </CardContent>
 
-                <Box sx={{ p: 2, pt: 0, display: 'flex', gap: 1 }}>
-                  <Button
-                    variant="contained"
-                    startIcon={<StartIcon />}
-                    component={Link}
-                    href={`/start-workout?templateId=${template.id}`}
-                    sx={{ flex: 1 }}
-                  >Workout starten</Button>
-                </Box>
+                  <Box sx={{ p: 2, pt: 0, display: 'flex', gap: 1 }}>
+                    <Button
+                      variant="contained"
+                      startIcon={<StartIcon />}
+                      component={Link}
+                      href={`/start-workout?templateId=${template.id}`}
+                      sx={{ flex: 1 }}
+                    >
+                      Workout starten
+                    </Button>
+                  </Box>
               </Card>
             );
           })}

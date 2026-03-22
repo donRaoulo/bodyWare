@@ -24,8 +24,10 @@ export default function TabLayout({
         sx={{
           flexGrow: 1,
           width: '100%',
-          p: { xs: 2, sm: 3 },
-          pb: { xs: 10, md: 3 }, // Account for bottom nav on mobile
+          p: { xs: 2, sm: 3, lg: 4 },
+          pb: { xs: 11, md: 4 }, // Account for bottom nav on mobile
+          maxWidth: 1220,
+          mx: 'auto',
         }}
       >
         {children}
