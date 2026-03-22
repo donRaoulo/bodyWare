@@ -10,9 +10,9 @@ import {
   List,
   ListItem,
   Chip,
-  CircularProgress,
   Alert,
   Skeleton,
+  LinearProgress,
 } from '@mui/material';
 import {
   Add as AddIcon,
@@ -43,13 +43,12 @@ export default function DashboardPage() {
     thisWeekWorkouts: 0,
     totalWeightKg: 0,
   });
-  const [sessionLimit, setSessionLimit] = useState<number>(5);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [calendarSessions, setCalendarSessions] = useState<WorkoutSession[]>([]);
   const [selectedDate, setSelectedDate] = useState<Date | null>(new Date());
   const [templates, setTemplates] = useState<WorkoutTemplate[]>([]);
-  const [dashboardSettings, setDashboardSettings] = useState<Pick<UserSettings, 'dashboardSessionLimit' | 'showRecentWorkouts' | 'showCalendar' | 'showStatsTotalWorkouts' | 'showStatsThisWeek' | 'showStatsTotalWeight' | 'showPrs' | 'dashboardWidgetOrder'>>({
+  const [dashboardSettings, setDashboardSettings] = useState<Pick<UserSettings, 'dashboardSessionLimit' | 'showRecentWorkouts' | 'showCalendar' | 'showStatsTotalWorkouts' | 'showStatsThisWeek' | 'showStatsTotalWeight' | 'showPrs' | 'showQuickstart' | 'showWeeklyGoal' | 'dashboardWidgetOrder'>>({
     dashboardSessionLimit: 5,
     showRecentWorkouts: true,
     showCalendar: true,
@@ -57,9 +56,14 @@ export default function DashboardPage() {
     showStatsThisWeek: true,
     showStatsTotalWeight: true,
     showPrs: true,
-    dashboardWidgetOrder: ['stats', 'prs', 'calendar', 'recent'],
+    showQuickstart: true,
+    showWeeklyGoal: true,
+    dashboardWidgetOrder: ['quickstart', 'weeklyGoal', 'stats', 'prs', 'calendar', 'recent'],
   });
   const [prs, setPrs] = useState<PersonalRecord[]>([]);
+  const weeklyGoal = 3;
+  const weeklyProgress = Math.min(100, Math.round((stats.thisWeekWorkouts / weeklyGoal) * 100));
+  const workoutsToGoal = Math.max(0, weeklyGoal - stats.thisWeekWorkouts);
 
   useEffect(() => {
     fetchDashboardData();
@@ -77,7 +81,6 @@ export default function DashboardPage() {
         settingsResponse.ok && settingsData.success && settingsData.data?.dashboardSessionLimit
           ? settingsData.data.dashboardSessionLimit
           : 5;
-      setSessionLimit(limitFromSettings);
       if (settingsResponse.ok && settingsData.success && settingsData.data) {
         setDashboardSettings({
           dashboardSessionLimit: settingsData.data.dashboardSessionLimit ?? limitFromSettings,
@@ -87,7 +90,9 @@ export default function DashboardPage() {
           showStatsThisWeek: settingsData.data.showStatsThisWeek ?? true,
           showStatsTotalWeight: settingsData.data.showStatsTotalWeight ?? true,
           showPrs: settingsData.data.showPrs ?? true,
-          dashboardWidgetOrder: settingsData.data.dashboardWidgetOrder ?? ['stats', 'prs', 'calendar', 'recent'],
+          showQuickstart: settingsData.data.showQuickstart ?? true,
+          showWeeklyGoal: settingsData.data.showWeeklyGoal ?? true,
+          dashboardWidgetOrder: settingsData.data.dashboardWidgetOrder ?? ['quickstart', 'weeklyGoal', 'stats', 'prs', 'calendar', 'recent'],
         });
       }
 
@@ -175,6 +180,71 @@ export default function DashboardPage() {
 
       {(() => {
         const widgets: Record<string, React.ReactNode> = {
+          quickstart: dashboardSettings.showQuickstart ? (
+            <Card sx={{ mb: 3 }}>
+              <CardContent>
+                <Typography variant="h6" gutterBottom>
+                  Schnellstart
+                </Typography>
+                <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+                  Starte direkt deine naechste Einheit oder fuege neue Daten hinzu.
+                </Typography>
+                <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1 }}>
+                  <Button variant="contained" startIcon={<FitnessIcon />} component={Link} href="/trainings">
+                    Workout starten
+                  </Button>
+                  <Button variant="outlined" startIcon={<AddIcon />} component={Link} href="/trainings/create">
+                    Workout anlegen
+                  </Button>
+                  <Button variant="outlined" startIcon={<AddIcon />} component={Link} href="/measurements/create">
+                    Messung eintragen
+                  </Button>
+                </Box>
+              </CardContent>
+            </Card>
+          ) : null,
+          weeklyGoal: dashboardSettings.showWeeklyGoal ? (
+            <Card
+              sx={{
+                mb: 3,
+                background: (theme) =>
+                  `linear-gradient(135deg, ${theme.palette.primary.main}14, ${theme.palette.primary.main}05)`,
+                border: (theme) => `1px solid ${theme.palette.primary.main}30`,
+              }}
+            >
+              <CardContent>
+                <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 2, mb: 1 }}>
+                  <Box>
+                    <Typography variant="h6">Wochenziel</Typography>
+                    <Typography variant="body2" color="text.secondary">
+                      {stats.thisWeekWorkouts} von {weeklyGoal} Workouts erledigt
+                    </Typography>
+                  </Box>
+                  <Chip
+                    color={workoutsToGoal === 0 ? 'success' : 'primary'}
+                    label={workoutsToGoal === 0 ? 'Ziel erreicht' : `${workoutsToGoal} offen`}
+                  />
+                </Box>
+                <LinearProgress
+                  variant="determinate"
+                  value={weeklyProgress}
+                  sx={{ height: 10, borderRadius: 999, mb: 1.5 }}
+                />
+                <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 2 }}>
+                  <Typography variant="body2" color="text.secondary">
+                    {workoutsToGoal === 0
+                      ? 'Stark. Optional: extra Session fuer ein neues PR.'
+                      : 'Bleib im Rhythmus und schliesse dein Wochenziel ab.'}
+                  </Typography>
+                  {workoutsToGoal > 0 && (
+                    <Button component={Link} href="/trainings" size="small" variant="contained">
+                      Jetzt Workout starten
+                    </Button>
+                  )}
+                </Box>
+              </CardContent>
+            </Card>
+          ) : null,
           stats:
             dashboardSettings.showStatsTotalWorkouts ||
             dashboardSettings.showStatsThisWeek ||
@@ -186,7 +256,7 @@ export default function DashboardPage() {
                       <Box sx={{ display: 'flex', alignItems: 'center', mb: 1 }}>
                         <FitnessIcon color="primary" sx={{ mr: 1 }} />
                         <Typography variant="h6" component="div">
-                          Total Workouts
+                          Gesamt-Workouts
                         </Typography>
                       </Box>
                       <Typography variant="h4" color="primary">
@@ -202,7 +272,7 @@ export default function DashboardPage() {
                       <Box sx={{ display: 'flex', alignItems: 'center', mb: 1 }}>
                         <TrendingIcon color="success" sx={{ mr: 1 }} />
                         <Typography variant="h6" component="div">
-                          This Week
+                          Diese Woche
                         </Typography>
                       </Box>
                       <Typography variant="h4" color="success.main">
@@ -218,13 +288,13 @@ export default function DashboardPage() {
                       <Box sx={{ display: 'flex', alignItems: 'center', mb: 1 }}>
                         <FitnessIcon color="warning" sx={{ mr: 1 }} />
                         <Typography variant="h6" component="div">
-                          Total Weight
+                          Bewegtes Gewicht
                         </Typography>
                       </Box>
                       <Typography variant="h4" color="warning.main">
                         {Math.round(stats.totalWeightKg)}
                         <Typography variant="caption" component="span" sx={{ ml: 0.5 }}>
-                          kg (sum)
+                          kg gesamt
                         </Typography>
                       </Typography>
                     </CardContent>
@@ -288,19 +358,24 @@ export default function DashboardPage() {
                   <Box sx={{ textAlign: 'center', py: 4 }}>
                     <FitnessIcon sx={{ fontSize: 48, color: 'text.secondary', mb: 2 }} />
                     <Typography variant="h6" color="text.secondary" gutterBottom>
-                      No workouts yet
+                      Noch keine Workouts
                     </Typography>
                     <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
-                      Start your fitness journey by creating your first workout template.
+                      Lege dein erstes Workout an oder starte direkt aus der Workout-Liste.
                     </Typography>
-                    <Button
-                      variant="contained"
-                      startIcon={<AddIcon />}
-                      component={Link}
-                      href="/trainings/create"
-                    >
-                      Create First Workout
-                    </Button>
+                    <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1, justifyContent: 'center' }}>
+                      <Button
+                        variant="contained"
+                        startIcon={<AddIcon />}
+                        component={Link}
+                        href="/trainings/create"
+                      >
+                        Erstes Workout anlegen
+                      </Button>
+                      <Button variant="outlined" component={Link} href="/trainings">
+                        Zur Workout-Liste
+                      </Button>
+                    </Box>
                   </Box>
                 ) : (
                   <List>
@@ -321,13 +396,13 @@ export default function DashboardPage() {
                               {session.templateName}
                             </Typography>
                             <Chip
-                              label={format(new Date(session.date), 'MMM d, yyyy')}
+                              label={format(new Date(session.date), 'dd.MM.yyyy')}
                               size="small"
                               variant="outlined"
                             />
                           </Box>
                           <Typography variant="body2" color="text.secondary">
-                            {session.exercises.length} {session.exercises.length === 1 ? 'exercise' : 'exercises'}
+                            {session.exercises.length} {session.exercises.length === 1 ? 'Uebung' : 'Uebungen'}
                           </Typography>
                           <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5, mt: 1 }}>
                             {session.exercises.slice(0, 3).map((exercise, index) => (
@@ -341,7 +416,7 @@ export default function DashboardPage() {
                             ))}
                             {session.exercises.length > 3 && (
                               <Chip
-                                label={`+${session.exercises.length - 3} more`}
+                                label={`+${session.exercises.length - 3} weitere`}
                                 size="small"
                                 variant="outlined"
                               />
@@ -359,7 +434,7 @@ export default function DashboardPage() {
 
         const order = dashboardSettings.dashboardWidgetOrder.length
           ? dashboardSettings.dashboardWidgetOrder
-          : ['stats', 'prs', 'calendar', 'recent'];
+          : ['quickstart', 'weeklyGoal', 'stats', 'prs', 'calendar', 'recent'];
 
         return (
           <>
@@ -372,3 +447,4 @@ export default function DashboardPage() {
     </Box>
   );
 }
+

@@ -51,7 +51,7 @@ export default function TrainingsPage() {
 
       // Fetch templates
       const templatesResponse = await fetch('/api/templates');
-      if (!templatesResponse.ok) throw new Error('Failed to fetch templates');
+      if (!templatesResponse.ok) throw new Error('Workouts konnten nicht geladen werden');
       const templatesData = await templatesResponse.json();
 
       if (templatesData.success) {
@@ -60,14 +60,14 @@ export default function TrainingsPage() {
 
       // Fetch exercises for display
       const exercisesResponse = await fetch('/api/exercises');
-      if (!exercisesResponse.ok) throw new Error('Failed to fetch exercises');
+      if (!exercisesResponse.ok) throw new Error('Uebungen konnten nicht geladen werden');
       const exercisesData = await exercisesResponse.json();
 
       if (exercisesData.success) {
         setExercises(exercisesData.data);
       }
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'An error occurred');
+      setError(err instanceof Error ? err.message : 'Ein Fehler ist aufgetreten');
     } finally {
       setLoading(false);
     }
@@ -98,12 +98,12 @@ export default function TrainingsPage() {
         method: 'DELETE',
       });
 
-      if (!response.ok) throw new Error('Failed to delete template');
+      if (!response.ok) throw new Error('Workout konnte nicht geloescht werden');
 
       // Refresh data
       await fetchData();
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to delete template');
+      setError(err instanceof Error ? err.message : 'Workout konnte nicht geloescht werden');
     } finally {
       setDeleteDialogOpen(false);
       setSelectedTemplate(null);
@@ -142,9 +142,7 @@ export default function TrainingsPage() {
           startIcon={<AddIcon />}
           component={Link}
           href="/trainings/create"
-        >
-          New
-        </Button>
+        >Neuer Plan</Button>
       </Box>
 
       {error && (
@@ -158,10 +156,10 @@ export default function TrainingsPage() {
           <CardContent sx={{ textAlign: 'center', py: 6 }}>
             <FitnessIcon sx={{ fontSize: 64, color: 'text.secondary', mb: 2 }} />
             <Typography variant="h5" gutterBottom>
-              No workout templates yet
+              Noch keine Workouts vorhanden
             </Typography>
             <Typography variant="body1" color="text.secondary" sx={{ mb: 3 }}>
-              Create your first workout template to get started with your fitness journey.
+              Lege dein erstes Workout an, damit du direkt loslegen kannst.
             </Typography>
             <Button
               variant="contained"
@@ -170,7 +168,7 @@ export default function TrainingsPage() {
               component={Link}
               href="/trainings/create"
             >
-              Create First Template
+              Erstes Workout anlegen
             </Button>
           </CardContent>
         </Card>
@@ -194,7 +192,7 @@ export default function TrainingsPage() {
                   </Box>
 
                   <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-                    {exerciseNames.length} {exerciseNames.length === 1 ? 'exercise' : 'exercises'}
+                    {exerciseNames.length} {exerciseNames.length === 1 ? 'Uebung' : 'Uebungen'}
                   </Typography>
 
                   <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5, mb: 3 }}>
@@ -208,7 +206,7 @@ export default function TrainingsPage() {
                     ))}
                     {exerciseNames.length > 3 && (
                       <Chip
-                        label={`+${exerciseNames.length - 3} more`}
+                        label={`+${exerciseNames.length - 3} weitere`}
                         size="small"
                         variant="outlined"
                       />
@@ -217,8 +215,8 @@ export default function TrainingsPage() {
 
                   <Typography variant="caption" color="text.secondary">
                     {template.lastUsedAt
-                      ? `Zuletzt genutzt ${format(new Date(template.lastUsedAt), 'MMM d, yyyy')}`
-                      : `Erstellt ${format(new Date(template.createdAt), 'MMM d, yyyy')}`}
+                      ? `Zuletzt genutzt ${format(new Date(template.lastUsedAt), 'dd.MM.yyyy')}`
+                      : `Erstellt ${format(new Date(template.createdAt), 'dd.MM.yyyy')}`}
                   </Typography>
                 </CardContent>
 
@@ -229,9 +227,7 @@ export default function TrainingsPage() {
                     component={Link}
                     href={`/start-workout?templateId=${template.id}`}
                     sx={{ flex: 1 }}
-                  >
-                    Start
-                  </Button>
+                  >Workout starten</Button>
                 </Box>
               </Card>
             );
@@ -246,13 +242,9 @@ export default function TrainingsPage() {
         onClose={handleMenuClose}
       >
         <MenuItem component={Link} href={`/trainings/edit/${selectedTemplate?.id}`}>
-          <EditIcon sx={{ mr: 1 }} />
-          Edit
-        </MenuItem>
+          <EditIcon sx={{ mr: 1 }} />Bearbeiten</MenuItem>
         <MenuItem onClick={handleDeleteClick} sx={{ color: 'error.main' }}>
-          <DeleteIcon sx={{ mr: 1 }} />
-          Delete
-        </MenuItem>
+          <DeleteIcon sx={{ mr: 1 }} />Loeschen</MenuItem>
       </Menu>
 
       {/* Delete Confirmation Dialog */}
@@ -262,22 +254,19 @@ export default function TrainingsPage() {
         maxWidth="sm"
         fullWidth
       >
-        <DialogTitle>Delete Workout Template</DialogTitle>
+        <DialogTitle>Workout loeschen</DialogTitle>
         <DialogContent>
           <Typography>
-            Are you sure you want to delete the workout template "{selectedTemplate?.name}"?
-            This action cannot be undone.
+            Moechtest du das Workout {selectedTemplate?.name} wirklich loeschen?
+            Diese Aktion kann nicht rueckgaengig gemacht werden.
           </Typography>
         </DialogContent>
         <DialogActions>
-          <Button onClick={handleDeleteCancel}>
-            Cancel
-          </Button>
-          <Button onClick={handleDeleteConfirm} color="error" variant="contained">
-            Delete
-          </Button>
+          <Button onClick={handleDeleteCancel}>Abbrechen</Button>
+          <Button onClick={handleDeleteConfirm} color="error" variant="contained">Loeschen</Button>
         </DialogActions>
       </Dialog>
     </Box>
   );
 }
+

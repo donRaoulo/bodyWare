@@ -51,7 +51,9 @@ export default function ProfilePage() {
     showStatsThisWeek: true,
     showStatsTotalWeight: true,
     showPrs: true,
-    dashboardWidgetOrder: ['stats', 'prs', 'calendar', 'recent'],
+    showQuickstart: true,
+    showWeeklyGoal: true,
+    dashboardWidgetOrder: ['quickstart', 'weeklyGoal', 'stats', 'prs', 'calendar', 'recent'],
   });
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -64,12 +66,16 @@ export default function ProfilePage() {
     showStatsThisWeek: true,
     showStatsTotalWeight: true,
     showPrs: true,
+    showQuickstart: true,
+    showWeeklyGoal: true,
     dashboardSessionLimit: 5,
-    dashboardWidgetOrder: ['stats', 'prs', 'calendar', 'recent'],
+    dashboardWidgetOrder: ['quickstart', 'weeklyGoal', 'stats', 'prs', 'calendar', 'recent'],
   });
   const [aboutOpen, setAboutOpen] = useState(false);
 
   const dashboardWidgets = [
+    { id: 'quickstart', label: 'Schnellstart' },
+    { id: 'weeklyGoal', label: 'Wochenziel' },
     { id: 'stats', label: 'Statistiken' },
     { id: 'prs', label: 'PRs / Bestleistungen' },
     { id: 'calendar', label: 'Kalender' },
@@ -148,10 +154,12 @@ export default function ProfilePage() {
       showStatsThisWeek: settings.showStatsThisWeek,
       showStatsTotalWeight: settings.showStatsTotalWeight,
       showPrs: settings.showPrs,
+      showQuickstart: settings.showQuickstart,
+      showWeeklyGoal: settings.showWeeklyGoal,
       dashboardSessionLimit: settings.dashboardSessionLimit,
       dashboardWidgetOrder: settings.dashboardWidgetOrder?.length
         ? settings.dashboardWidgetOrder
-        : ['stats', 'prs', 'calendar', 'recent'],
+        : ['quickstart', 'weeklyGoal', 'stats', 'prs', 'calendar', 'recent'],
     });
     setDashboardDialogOpen(true);
   };
@@ -170,6 +178,8 @@ export default function ProfilePage() {
       showStatsThisWeek: dashboardDraft.showStatsThisWeek,
       showStatsTotalWeight: dashboardDraft.showStatsTotalWeight,
       showPrs: dashboardDraft.showPrs,
+      showQuickstart: dashboardDraft.showQuickstart,
+      showWeeklyGoal: dashboardDraft.showWeeklyGoal,
       dashboardWidgetOrder: dashboardDraft.dashboardWidgetOrder,
     });
     setDashboardDialogOpen(false);
@@ -513,6 +523,30 @@ export default function ProfilePage() {
                 />
               }
               label="Kalender anzeigen"
+            />
+
+            <FormControlLabel
+              control={
+                <Switch
+                  checked={dashboardDraft.showQuickstart}
+                  onChange={(e) =>
+                    setDashboardDraft((prev) => ({ ...prev, showQuickstart: e.target.checked }))
+                  }
+                />
+              }
+              label="Schnellstart anzeigen"
+            />
+
+            <FormControlLabel
+              control={
+                <Switch
+                  checked={dashboardDraft.showWeeklyGoal}
+                  onChange={(e) =>
+                    setDashboardDraft((prev) => ({ ...prev, showWeeklyGoal: e.target.checked }))
+                  }
+                />
+              }
+              label="Wochenziel anzeigen"
             />
 
             <Typography variant="subtitle2">Statistiken</Typography>

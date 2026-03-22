@@ -85,6 +85,8 @@ export interface UserSettings {
   showStatsThisWeek: boolean;
   showStatsTotalWeight: boolean;
   showPrs: boolean;
+  showQuickstart: boolean;
+  showWeeklyGoal: boolean;
   dashboardWidgetOrder: string[];
 }
 

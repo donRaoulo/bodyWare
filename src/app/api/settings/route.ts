@@ -5,6 +5,28 @@ import { getServerSession } from 'next-auth/next';
 import { authOptions } from '../../../lib/auth';
 import { v4 as uuidv4 } from 'uuid';
 
+const DASHBOARD_WIDGET_IDS = ['quickstart', 'weeklyGoal', 'stats', 'prs', 'calendar', 'recent'] as const;
+
+function normalizeDashboardWidgetOrder(value: unknown): string[] {
+  const allowed = new Set<string>(DASHBOARD_WIDGET_IDS);
+  const input = Array.isArray(value) ? value.filter((item): item is string => typeof item === 'string') : [];
+  const deduped: string[] = [];
+
+  for (const item of input) {
+    if (allowed.has(item) && !deduped.includes(item)) {
+      deduped.push(item);
+    }
+  }
+
+  for (const item of DASHBOARD_WIDGET_IDS) {
+    if (!deduped.includes(item)) {
+      deduped.push(item);
+    }
+  }
+
+  return deduped;
+}
+
 // GET /api/settings - Fetch user settings
 export async function GET() {
   try {
@@ -36,26 +58,25 @@ export async function GET() {
           show_stats_this_week,
           show_stats_total_weight,
           show_prs,
+          show_quickstart,
+          show_weekly_goal,
           dashboard_widget_order
         )
-        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
       `,
-        [uuidv4(), userId, 5, false, true, true, true, true, true, true, '["stats","prs","calendar","recent"]']
+        [uuidv4(), userId, 5, false, true, true, true, true, true, true, true, true, '["quickstart","weeklyGoal","stats","prs","calendar","recent"]']
       );
 
       settingsResult = await query<any>('SELECT * FROM user_settings WHERE user_id = $1', [userId]);
       settings = settingsResult.rows[0];
     }
 
-    let parsedWidgetOrder: string[] = ['stats', 'prs', 'calendar', 'recent'];
+    let parsedWidgetOrder: string[] = [...DASHBOARD_WIDGET_IDS];
     if (settings.dashboard_widget_order) {
       try {
-        const parsed = JSON.parse(settings.dashboard_widget_order);
-        if (Array.isArray(parsed)) {
-          parsedWidgetOrder = parsed;
-        }
+        parsedWidgetOrder = normalizeDashboardWidgetOrder(JSON.parse(settings.dashboard_widget_order));
       } catch {
-        parsedWidgetOrder = ['stats', 'prs', 'calendar', 'recent'];
+        parsedWidgetOrder = [...DASHBOARD_WIDGET_IDS];
       }
     }
     const responseSettings: UserSettings = {
@@ -70,6 +91,8 @@ export async function GET() {
       showStatsThisWeek: settings.show_stats_this_week ?? true,
       showStatsTotalWeight: settings.show_stats_total_weight ?? true,
       showPrs: settings.show_prs ?? true,
+      showQuickstart: settings.show_quickstart ?? true,
+      showWeeklyGoal: settings.show_weekly_goal ?? true,
       dashboardWidgetOrder: parsedWidgetOrder,
     };
 
@@ -108,6 +131,8 @@ export async function PUT(request: NextRequest) {
       showStatsThisWeek,
       showStatsTotalWeight,
       showPrs,
+      showQuickstart,
+      showWeeklyGoal,
       dashboardWidgetOrder,
     }: {
       dashboardSessionLimit?: number;
@@ -119,6 +144,8 @@ export async function PUT(request: NextRequest) {
       showStatsThisWeek?: boolean;
       showStatsTotalWeight?: boolean;
       showPrs?: boolean;
+      showQuickstart?: boolean;
+      showWeeklyGoal?: boolean;
       dashboardWidgetOrder?: string[];
     } = body;
 
@@ -140,11 +167,13 @@ export async function PUT(request: NextRequest) {
           show_stats_this_week,
           show_stats_total_weight,
           show_prs,
+          show_quickstart,
+          show_weekly_goal,
           dashboard_widget_order
         )
-        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
       `,
-        [uuidv4(), userId, 5, false, '#58a6ff', true, true, true, true, true, true, '["stats","prs","calendar","recent"]']
+        [uuidv4(), userId, 5, false, '#58a6ff', true, true, true, true, true, true, true, true, '["quickstart","weeklyGoal","stats","prs","calendar","recent"]']
       );
     }
 
@@ -198,17 +227,24 @@ export async function PUT(request: NextRequest) {
       updateValues.push(showPrs);
     }
 
+    if (showQuickstart !== undefined) {
+      updateFields.push('show_quickstart = $' + (updateValues.length + 1));
+      updateValues.push(showQuickstart);
+    }
+
+    if (showWeeklyGoal !== undefined) {
+      updateFields.push('show_weekly_goal = $' + (updateValues.length + 1));
+      updateValues.push(showWeeklyGoal);
+    }
+
     if (dashboardWidgetOrder !== undefined) {
-      const allowed = new Set(['stats', 'prs', 'calendar', 'recent']);
-      const normalizedOrder = Array.isArray(dashboardWidgetOrder)
-        ? dashboardWidgetOrder.filter((item) => allowed.has(item))
-        : [];
-      if (!normalizedOrder.length) {
+      if (!Array.isArray(dashboardWidgetOrder)) {
         return NextResponse.json<ApiResponse<UserSettings>>({
           success: false,
           error: 'Invalid dashboard widget order',
         }, { status: 400 });
       }
+      const normalizedOrder = normalizeDashboardWidgetOrder(dashboardWidgetOrder);
       updateFields.push('dashboard_widget_order = $' + (updateValues.length + 1));
       updateValues.push(JSON.stringify(normalizedOrder));
     }
@@ -248,15 +284,12 @@ export async function PUT(request: NextRequest) {
     const settingsResult = await query<any>('SELECT * FROM user_settings WHERE user_id = $1', [userId]);
     const settings = settingsResult.rows[0];
 
-    let parsedUpdatedOrder: string[] = ['stats', 'prs', 'calendar', 'recent'];
+    let parsedUpdatedOrder: string[] = [...DASHBOARD_WIDGET_IDS];
     if (settings.dashboard_widget_order) {
       try {
-        const parsed = JSON.parse(settings.dashboard_widget_order);
-        if (Array.isArray(parsed)) {
-          parsedUpdatedOrder = parsed;
-        }
+        parsedUpdatedOrder = normalizeDashboardWidgetOrder(JSON.parse(settings.dashboard_widget_order));
       } catch {
-        parsedUpdatedOrder = ['stats', 'prs', 'calendar', 'recent'];
+        parsedUpdatedOrder = [...DASHBOARD_WIDGET_IDS];
       }
     }
     const responseSettings: UserSettings = {
@@ -271,6 +304,8 @@ export async function PUT(request: NextRequest) {
       showStatsThisWeek: settings.show_stats_this_week ?? true,
       showStatsTotalWeight: settings.show_stats_total_weight ?? true,
       showPrs: settings.show_prs ?? true,
+      showQuickstart: settings.show_quickstart ?? true,
+      showWeeklyGoal: settings.show_weekly_goal ?? true,
       dashboardWidgetOrder: parsedUpdatedOrder,
     };
 

@@ -1,4 +1,4 @@
-﻿'use client';
+'use client';
 
 import { useEffect, useMemo, useState } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
@@ -17,6 +17,8 @@ import {
   IconButton,
   FormControlLabel,
   Checkbox,
+  LinearProgress,
+  Chip,
 } from '@mui/material';
 import { format } from 'date-fns';
 import type { Exercise, WorkoutTemplate, WorkoutSession, ExerciseSession } from '../../lib/types';
@@ -77,6 +79,10 @@ export default function StartWorkoutPage() {
   );
 
   const allSaved = sessionExercises.length > 0 && sessionExercises.every((ex) => savedExerciseIds.has(ex.exerciseId));
+  const totalExercises = sessionExercises.length;
+  const savedExercisesCount = savedExerciseIds.size;
+  const progressPercent = totalExercises > 0 ? Math.round((savedExercisesCount / totalExercises) * 100) : 0;
+  const nextOpenExerciseId = sessionExercises.find((ex) => !savedExerciseIds.has(ex.exerciseId))?.exerciseId;
 
   useEffect(() => {
     if (!templateId) return;
@@ -96,7 +102,7 @@ export default function StartWorkoutPage() {
 
         const templateData = await templateRes.json();
         if (!templateRes.ok || !templateData.success) {
-          throw new Error(templateData?.error || 'Template konnte nicht geladen werden');
+          throw new Error(templateData?.error || 'Workout konnte nicht geladen werden');
         }
         setTemplate(templateData.data);
 
@@ -334,11 +340,11 @@ export default function StartWorkoutPage() {
       });
       const data = await res.json();
       if (!res.ok || !data.success) {
-        throw new Error(data?.error || 'Workout konnte nicht gestartet werden');
+        throw new Error(data?.error || 'Workout konnte nicht gespeichert werden');
       }
       router.push('/dashboard');
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Workout konnte nicht gestartet werden');
+      setError(err instanceof Error ? err.message : 'Workout konnte nicht gespeichert werden');
     } finally {
       setStarting(false);
     }
@@ -438,10 +444,17 @@ export default function StartWorkoutPage() {
     );
   };
 
+  const scrollToNextOpenExercise = () => {
+    if (!nextOpenExerciseId) return;
+    const target = document.getElementById(`exercise-${nextOpenExerciseId}`);
+    if (!target) return;
+    target.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  };
+
   if (!templateId) {
     return (
       <Box sx={{ p: 4 }}>
-        <Alert severity="error">Kein Template gewaehlt.</Alert>
+        <Alert severity="error">Kein Workout ausgewaehlt.</Alert>
       </Box>
     );
   }
@@ -449,7 +462,7 @@ export default function StartWorkoutPage() {
   return (
     <Box sx={{ maxWidth: 800, mx: 'auto', pt: { xs: 2, md: 6 } }}>
       <Typography variant="h4" component="h1" gutterBottom>
-        Workout starten
+        Workout erfassen
       </Typography>
 
       {error && (
@@ -467,6 +480,19 @@ export default function StartWorkoutPage() {
               <Typography variant="h6" gutterBottom>
                 {template.name}
               </Typography>
+              <Card variant="outlined" sx={{ mb: 2 }}>
+                <CardContent sx={{ py: 1.5 }}>
+                  <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 1 }}>
+                    <Typography variant="subtitle2">Fortschritt</Typography>
+                    <Chip
+                      size="small"
+                      color={allSaved ? 'success' : 'primary'}
+                      label={`${savedExercisesCount}/${totalExercises} gespeichert`}
+                    />
+                  </Box>
+                  <LinearProgress variant="determinate" value={progressPercent} sx={{ height: 8, borderRadius: 999 }} />
+                </CardContent>
+              </Card>
               {dateParam && !Number.isNaN(new Date(dateParam).getTime()) && (
                 <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
                   Datum: {format(new Date(dateParam), 'dd.MM.yyyy')}
@@ -478,7 +504,7 @@ export default function StartWorkoutPage() {
                 </Alert>
               )}
               <List dense sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
-                {sortedExercises.map((ex, idx) => {
+                {sortedExercises.map((ex) => {
                   const isSaved = savedExerciseIds.has(ex.exerciseId);
                   const counterExercise = exerciseMap.get(ex.exerciseId);
                   const counterGoal = counterExercise?.goal ?? null;
@@ -491,6 +517,7 @@ export default function StartWorkoutPage() {
                   const counterSecondary = counterDueLabel ? `Bis ${counterDueLabel}` : 'Ziel';
                   return (
                     <ListItem
+                      id={`exercise-${ex.exerciseId}`}
                       key={ex.exerciseId}
                       disableGutters
                       sx={{
@@ -779,29 +806,49 @@ export default function StartWorkoutPage() {
                   );
                 })}
               </List>
-              <Box sx={{ display: 'flex', gap: 2, justifyContent: 'flex-end', mt: 2 }}>
+              <Box
+                sx={{
+                  position: 'sticky',
+                  bottom: { xs: 8, md: 12 },
+                  display: 'flex',
+                  gap: 1,
+                  justifyContent: 'space-between',
+                  alignItems: 'center',
+                  mt: 2,
+                  p: 1,
+                  borderRadius: 2,
+                  border: '1px solid',
+                  borderColor: 'divider',
+                  bgcolor: 'background.paper',
+                  boxShadow: 2,
+                  zIndex: 2,
+                  flexWrap: 'wrap',
+                }}
+              >
+                <Typography variant="caption" color="text.secondary">
+                  {savedExercisesCount}/{totalExercises} Uebungen gespeichert
+                </Typography>
+                <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+                {!allSaved && (
+                  <Button variant="outlined" onClick={scrollToNextOpenExercise}>
+                    Naechste offene Uebung
+                  </Button>
+                )}
                 <Button variant="outlined" onClick={() => requestNavigation('/trainings')}>
                   Zurueck
                 </Button>
-                <Button variant="contained" onClick={startWorkout} disabled={starting}>
+                <Button variant="contained" onClick={startWorkout} disabled={starting || !savedExercisesCount}>
                   {starting ? 'Speichert...' : 'Workout speichern'}
                 </Button>
+                </Box>
               </Box>
             </>
           ) : (
-            <Typography>Kein Template gefunden.</Typography>
+            <Typography>Kein Workout gefunden.</Typography>
           )}
         </CardContent>
       </Card>
     </Box>
   );
 }
-
-
-
-
-
-
-
-
 

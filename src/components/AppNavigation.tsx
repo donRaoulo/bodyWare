@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useEffect } from 'react';
 import { usePathname } from 'next/navigation';
 import {
   BottomNavigation,
@@ -18,7 +18,6 @@ import {
   FitnessCenter as FitnessIcon,
   Straighten as BodyIcon,
   Person as ProfileIcon,
-  Menu as MenuIcon,
 } from '@mui/icons-material';
 import { useNavigationGuard } from './NavigationGuardProvider';
 
@@ -38,7 +37,7 @@ const navigationItems: NavigationItem[] = [
   },
   {
     id: 'trainings',
-    label: 'Trainings',
+    label: 'Workouts',
     href: '/trainings',
     icon: <FitnessIcon />,
   },
@@ -50,7 +49,7 @@ const navigationItems: NavigationItem[] = [
   },
   {
     id: 'profile',
-    label: 'Profile',
+    label: 'Profil',
     href: '/profile',
     icon: <ProfileIcon />,
   },
@@ -169,3 +168,4 @@ export function AppNavigation() {
     </>
   );
 }
+

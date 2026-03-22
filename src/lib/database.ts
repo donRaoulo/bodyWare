@@ -174,7 +174,9 @@ async function createTables() {
         show_stats_this_week BOOLEAN DEFAULT TRUE,
         show_stats_total_weight BOOLEAN DEFAULT TRUE,
         show_prs BOOLEAN DEFAULT TRUE,
-        dashboard_widget_order TEXT DEFAULT '["stats","prs","calendar","recent"]'
+        show_quickstart BOOLEAN DEFAULT TRUE,
+        show_weekly_goal BOOLEAN DEFAULT TRUE,
+        dashboard_widget_order TEXT DEFAULT '["quickstart","weeklyGoal","stats","prs","calendar","recent"]'
       );
     `);
 
@@ -378,9 +380,21 @@ async function createTables() {
         END IF;
         IF NOT EXISTS (
           SELECT 1 FROM information_schema.columns
+          WHERE table_name = 'user_settings' AND column_name = 'show_quickstart'
+        ) THEN
+          ALTER TABLE user_settings ADD COLUMN show_quickstart BOOLEAN DEFAULT TRUE;
+        END IF;
+        IF NOT EXISTS (
+          SELECT 1 FROM information_schema.columns
+          WHERE table_name = 'user_settings' AND column_name = 'show_weekly_goal'
+        ) THEN
+          ALTER TABLE user_settings ADD COLUMN show_weekly_goal BOOLEAN DEFAULT TRUE;
+        END IF;
+        IF NOT EXISTS (
+          SELECT 1 FROM information_schema.columns
           WHERE table_name = 'user_settings' AND column_name = 'dashboard_widget_order'
         ) THEN
-          ALTER TABLE user_settings ADD COLUMN dashboard_widget_order TEXT DEFAULT '["stats","prs","calendar","recent"]';
+          ALTER TABLE user_settings ADD COLUMN dashboard_widget_order TEXT DEFAULT '["quickstart","weeklyGoal","stats","prs","calendar","recent"]';
         END IF;
       END$$;
     `);
