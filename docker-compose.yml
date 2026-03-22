@@ -10,7 +10,7 @@ services:
     env_file:
       - .env.local
     environment:
-      DATABASE_URL: postgres://bodyware:bodyware@db:5433/bodyware
+      DATABASE_URL: postgres://bodyware:bodyware@db:5432/bodyware
       NEXTAUTH_URL: http://localhost:3000
     depends_on:
       - db
