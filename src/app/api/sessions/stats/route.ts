@@ -7,6 +7,7 @@ import { authOptions } from '../../../../lib/auth';
 interface DashboardStats {
   totalWorkouts: number;
   thisWeekWorkouts: number;
+  thisWeekGoalWorkouts: number;
   totalWeightKg: number;
 }
 
@@ -45,6 +46,18 @@ export async function GET() {
       [userId, startOfWeek.toISOString(), endOfWeek.toISOString()]
     );
 
+    const thisWeekGoalWorkoutsResult = await query<{ count: string }>(
+      `
+      SELECT COUNT(*)::int AS count
+      FROM workout_sessions ws
+      LEFT JOIN workout_templates wt ON wt.id = ws.template_id
+      WHERE ws.user_id = $1
+        AND ws.started_at BETWEEN $2 AND $3
+        AND COALESCE(wt.track_in_weekly_goal, TRUE) = TRUE
+      `,
+      [userId, startOfWeek.toISOString(), endOfWeek.toISOString()]
+    );
+
     // Sum all lifted weight across strength exercises (sum of weight*reps per set)
     const strengthRows = await query<any>(
       `
@@ -71,6 +84,7 @@ export async function GET() {
     const stats: DashboardStats = {
       totalWorkouts: parseInt(totalWorkoutsResult.rows[0].count, 10),
       thisWeekWorkouts: parseInt(thisWeekWorkoutsResult.rows[0].count, 10),
+      thisWeekGoalWorkouts: parseInt(thisWeekGoalWorkoutsResult.rows[0].count, 10),
       totalWeightKg,
     };
 

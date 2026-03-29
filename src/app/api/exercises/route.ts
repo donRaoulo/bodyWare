@@ -29,6 +29,7 @@ export async function GET(request: NextRequest) {
         type,
         goal_value AS goal,
         goal_due_date,
+        show_in_personal_records,
         created_at,
         is_builtin
       FROM exercises
@@ -57,6 +58,7 @@ export async function GET(request: NextRequest) {
       type: row.type,
       goal: row.goal ?? null,
       goalDueDate: row.goal_due_date ?? null,
+      showInPersonalRecords: Boolean(row.show_in_personal_records),
       createdAt: new Date(row.created_at),
       isDefault: Boolean(row.is_builtin),
     })) as Exercise[];
@@ -87,7 +89,19 @@ export async function POST(request: NextRequest) {
 
     const userId = session.user.id;
     const body = await request.json();
-    const { name, type, goal, goalDueDate }: { name: string; type: ExerciseType; goal?: number | null; goalDueDate?: string | null } = body;
+    const {
+      name,
+      type,
+      goal,
+      goalDueDate,
+      showInPersonalRecords,
+    }: {
+      name: string;
+      type: ExerciseType;
+      goal?: number | null;
+      goalDueDate?: string | null;
+      showInPersonalRecords?: boolean;
+    } = body;
 
     if (!name || !type) {
       return NextResponse.json<ApiResponse<Exercise>>({
@@ -114,6 +128,7 @@ export async function POST(request: NextRequest) {
       ? (goal !== null && goal !== undefined ? Number(goal) : null)
       : null;
     const normalizedGoalDueDate = type === 'counter' ? (goalDueDate ? String(goalDueDate) : '') : null;
+    const normalizedShowInPersonalRecords = showInPersonalRecords ?? true;
 
     if (
       type === 'counter' &&
@@ -161,13 +176,24 @@ export async function POST(request: NextRequest) {
         type,
         goal_value,
         goal_due_date,
+        show_in_personal_records,
         is_builtin,
         created_at,
         updated_at
       )
-      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $8)
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $9)
     `,
-      [id, userId, name.trim(), type, type === 'counter' ? normalizedGoal : null, type === 'counter' ? normalizedGoalDueDate : null, false, now]
+      [
+        id,
+        userId,
+        name.trim(),
+        type,
+        type === 'counter' ? normalizedGoal : null,
+        type === 'counter' ? normalizedGoalDueDate : null,
+        normalizedShowInPersonalRecords,
+        false,
+        now,
+      ]
     );
 
     const exerciseResult = await query<any>(
@@ -179,6 +205,7 @@ export async function POST(request: NextRequest) {
         type,
         goal_value AS goal,
         goal_due_date,
+        show_in_personal_records,
         created_at,
         is_builtin
       FROM exercises
@@ -195,6 +222,7 @@ export async function POST(request: NextRequest) {
       type: exercise.type,
       goal: exercise.goal ?? null,
       goalDueDate: exercise.goal_due_date ?? null,
+      showInPersonalRecords: Boolean(exercise.show_in_personal_records),
       createdAt: new Date(exercise.created_at),
       isDefault: Boolean(exercise.is_builtin),
     };

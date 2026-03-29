@@ -7,6 +7,7 @@ export interface Exercise {
   type: ExerciseType;
   goal?: number | null;
   goalDueDate?: string | null;
+  showInPersonalRecords: boolean;
   createdAt: Date;
   isDefault: boolean;
 }
@@ -16,6 +17,8 @@ export interface WorkoutTemplate {
   userId: string;
   name: string;
   exerciseIds: string[];
+  trackInRecentWorkouts?: boolean;
+  trackInWeeklyGoal?: boolean;
   createdAt: Date;
   updatedAt: Date;
   lastUsedAt?: Date;
@@ -139,11 +142,12 @@ export const EXERCISE_TYPE_CONFIG = {
 
 // Default exercises for seeding
 export const DEFAULT_EXERCISES: Omit<Exercise, 'id' | 'createdAt'>[] = [
-  { name: 'Bankdrücken', type: 'strength', isDefault: true },
-  { name: 'Kniebeugen', type: 'strength', isDefault: true },
-  { name: 'Kreuzheben', type: 'strength', isDefault: true },
-  { name: 'Laufen', type: 'cardio', isDefault: true },
-  { name: 'Radfahren', type: 'cardio', isDefault: true },
-  { name: 'Schwimmen', type: 'endurance', isDefault: true },
-  { name: 'Yoga', type: 'stretch', isDefault: true }
+  { name: 'Bankdrücken', type: 'strength', isDefault: true, showInPersonalRecords: true },
+  { name: 'Kniebeugen', type: 'strength', isDefault: true, showInPersonalRecords: true },
+  { name: 'Kreuzheben', type: 'strength', isDefault: true, showInPersonalRecords: true },
+  { name: 'Laufen', type: 'cardio', isDefault: true, showInPersonalRecords: true },
+  { name: 'Radfahren', type: 'cardio', isDefault: true, showInPersonalRecords: true },
+  { name: 'Schwimmen', type: 'endurance', isDefault: true, showInPersonalRecords: true },
+  { name: 'Yoga', type: 'stretch', isDefault: true, showInPersonalRecords: true }
 ];
+

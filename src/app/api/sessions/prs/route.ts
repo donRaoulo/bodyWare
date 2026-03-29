@@ -25,17 +25,20 @@ export async function GET() {
     const result = await query<any>(
       `
       SELECT
-        exercise_id,
-        exercise_name,
+        wsi.exercise_id,
+        wsi.exercise_name,
         MAX((set_item->>'weight')::numeric) AS max_weight
-      FROM workout_session_items
-      CROSS JOIN LATERAL jsonb_array_elements(payload->'sets') AS set_item
-      WHERE user_id = $1
-        AND exercise_type = 'strength'
-        AND payload IS NOT NULL
+      FROM workout_session_items wsi
+      LEFT JOIN exercises ex
+        ON ex.id = wsi.exercise_id
+      CROSS JOIN LATERAL jsonb_array_elements(wsi.payload->'sets') AS set_item
+      WHERE wsi.user_id = $1
+        AND wsi.exercise_type = 'strength'
+        AND wsi.payload IS NOT NULL
+        AND COALESCE(ex.show_in_personal_records, TRUE) = TRUE
         AND (set_item->>'weight') IS NOT NULL
         AND (set_item->>'weight') <> ''
-      GROUP BY exercise_id, exercise_name
+      GROUP BY wsi.exercise_id, wsi.exercise_name
       ORDER BY max_weight DESC
       LIMIT 5
     `,

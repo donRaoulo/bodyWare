@@ -17,6 +17,8 @@ import {
   DialogContent,
   DialogActions,
   MenuItem,
+  FormControlLabel,
+  Switch,
 } from '@mui/material';
 import { useRouter, useParams } from 'next/navigation';
 import { Exercise, ExerciseType, WorkoutTemplate } from '../../../../lib/types';
@@ -40,8 +42,11 @@ export default function EditTrainingTemplatePage() {
   const [newExerciseType, setNewExerciseType] = useState<ExerciseType>('strength');
   const [newExerciseGoal, setNewExerciseGoal] = useState('');
   const [newExerciseGoalDueDate, setNewExerciseGoalDueDate] = useState('');
+  const [newExerciseShowInPersonalRecords, setNewExerciseShowInPersonalRecords] = useState(true);
   const [newExerciseError, setNewExerciseError] = useState<string | null>(null);
   const [creatingExercise, setCreatingExercise] = useState(false);
+  const [trackInRecentWorkouts, setTrackInRecentWorkouts] = useState(true);
+  const [trackInWeeklyGoal, setTrackInWeeklyGoal] = useState(true);
 
   useEffect(() => {
     if (!id) return;
@@ -60,6 +65,8 @@ export default function EditTrainingTemplatePage() {
         const t: WorkoutTemplate = templateData.data;
         setName(t.name);
         setSelectedIds(t.exerciseIds);
+        setTrackInRecentWorkouts(t.trackInRecentWorkouts ?? true);
+        setTrackInWeeklyGoal(t.trackInWeeklyGoal ?? true);
 
         const exercisesData = await exercisesRes.json();
         if (!exercisesRes.ok || !exercisesData.success) {
@@ -94,7 +101,12 @@ export default function EditTrainingTemplatePage() {
       const res = await fetch(`/api/templates/${id}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name: name.trim(), exerciseIds: selectedIds }),
+        body: JSON.stringify({
+          name: name.trim(),
+          exerciseIds: selectedIds,
+          trackInRecentWorkouts,
+          trackInWeeklyGoal,
+        }),
       });
       const data = await res.json();
       if (!res.ok || !data.success) {
@@ -135,6 +147,7 @@ export default function EditTrainingTemplatePage() {
           type: newExerciseType,
           goal: newExerciseType === 'counter' ? Number(newExerciseGoal) : null,
           goalDueDate: newExerciseType === 'counter' ? newExerciseGoalDueDate : null,
+          showInPersonalRecords: newExerciseShowInPersonalRecords,
         }),
       });
       const data = await res.json();
@@ -149,6 +162,7 @@ export default function EditTrainingTemplatePage() {
       setNewExerciseType('strength');
       setNewExerciseGoal('');
       setNewExerciseGoalDueDate('');
+      setNewExerciseShowInPersonalRecords(true);
     } catch (err) {
       setNewExerciseError(err instanceof Error ? err.message : 'Übung konnte nicht erstellt werden');
     } finally {
@@ -188,6 +202,28 @@ export default function EditTrainingTemplatePage() {
                   value={name}
                   onChange={(e) => setName(e.target.value)}
                   required
+                />
+
+                <Divider />
+
+                <Typography variant="subtitle1">Workout Tracking</Typography>
+                <FormControlLabel
+                  control={
+                    <Switch
+                      checked={trackInRecentWorkouts}
+                      onChange={(e) => setTrackInRecentWorkouts(e.target.checked)}
+                    />
+                  }
+                  label="In Letzte Workouts auf dem Dashboard anzeigen"
+                />
+                <FormControlLabel
+                  control={
+                    <Switch
+                      checked={trackInWeeklyGoal}
+                      onChange={(e) => setTrackInWeeklyGoal(e.target.checked)}
+                    />
+                  }
+                  label="Fuer das Wochenziel mitzaehlen"
                 />
 
                 <Divider />
@@ -269,6 +305,15 @@ export default function EditTrainingTemplatePage() {
               <MenuItem value="stretch">Stretch</MenuItem>
               <MenuItem value="counter">Ziel</MenuItem>
             </TextField>
+            <FormControlLabel
+              control={
+                <Switch
+                  checked={newExerciseShowInPersonalRecords}
+                  onChange={(e) => setNewExerciseShowInPersonalRecords(e.target.checked)}
+                />
+              }
+              label="In Bestleistungen anzeigen"
+            />
             {newExerciseType === 'counter' && (
               <>
                 <TextField

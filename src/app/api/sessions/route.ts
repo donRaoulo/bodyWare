@@ -22,13 +22,17 @@ export async function GET(request: NextRequest) {
     const limit = parseInt(searchParams.get('limit') || '10');
     const offset = parseInt(searchParams.get('offset') || '0');
     const templateId = searchParams.get('templateId');
+    const dashboardRecentOnly = searchParams.get('dashboardRecentOnly') === 'true';
 
     const sessionResult = await query<any>(
       `
-      SELECT * FROM workout_sessions
-      WHERE user_id = $1
-      ${templateId ? 'AND template_id = $2' : ''}
-      ORDER BY started_at DESC, created_at DESC
+      SELECT ws.*
+      FROM workout_sessions ws
+      LEFT JOIN workout_templates wt ON wt.id = ws.template_id
+      WHERE ws.user_id = $1
+      ${templateId ? 'AND ws.template_id = $2' : ''}
+      ${dashboardRecentOnly ? `AND COALESCE(wt.track_in_recent_workouts, TRUE) = TRUE` : ''}
+      ORDER BY ws.started_at DESC, ws.created_at DESC
       LIMIT ${templateId ? '$3' : '$2'} OFFSET ${templateId ? '$4' : '$3'}
     `,
       templateId ? [userId, templateId, limit, offset] : [userId, limit, offset]

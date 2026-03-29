@@ -12,6 +12,8 @@ import {
   Chip,
   Stack,
   Divider,
+  FormControlLabel,
+  Switch,
 } from '@mui/material';
 import { useRouter } from 'next/navigation';
 import { Exercise, ExerciseType } from '../../../lib/types';
@@ -39,8 +41,11 @@ export default function CreateTrainingTemplatePage() {
   const [newExerciseType, setNewExerciseType] = useState<ExerciseType>('strength');
   const [newExerciseGoal, setNewExerciseGoal] = useState('');
   const [newExerciseGoalDueDate, setNewExerciseGoalDueDate] = useState('');
+  const [newExerciseShowInPersonalRecords, setNewExerciseShowInPersonalRecords] = useState(true);
   const [newExerciseError, setNewExerciseError] = useState<string | null>(null);
   const [creatingExercise, setCreatingExercise] = useState(false);
+  const [trackInRecentWorkouts, setTrackInRecentWorkouts] = useState(true);
+  const [trackInWeeklyGoal, setTrackInWeeklyGoal] = useState(true);
 
   useEffect(() => {
     const loadExercises = async () => {
@@ -55,6 +60,8 @@ export default function CreateTrainingTemplatePage() {
         // ensure new template starts with no selection
         setSelectedIds([]);
         setName('');
+        setTrackInRecentWorkouts(true);
+        setTrackInWeeklyGoal(true);
       } catch (err) {
         setError(err instanceof Error ? err.message : 'Failed to load exercises');
       } finally {
@@ -82,7 +89,12 @@ export default function CreateTrainingTemplatePage() {
       const res = await fetch('/api/templates', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name: name.trim(), exerciseIds: selectedIds }),
+        body: JSON.stringify({
+          name: name.trim(),
+          exerciseIds: selectedIds,
+          trackInRecentWorkouts,
+          trackInWeeklyGoal,
+        }),
       });
       const data = await res.json();
       if (!res.ok || !data.success) {
@@ -123,6 +135,7 @@ export default function CreateTrainingTemplatePage() {
           type: newExerciseType,
           goal: newExerciseType === 'counter' ? Number(newExerciseGoal) : null,
           goalDueDate: newExerciseType === 'counter' ? newExerciseGoalDueDate : null,
+          showInPersonalRecords: newExerciseShowInPersonalRecords,
         }),
       });
       const data = await res.json();
@@ -137,6 +150,7 @@ export default function CreateTrainingTemplatePage() {
       setNewExerciseType('strength');
       setNewExerciseGoal('');
       setNewExerciseGoalDueDate('');
+      setNewExerciseShowInPersonalRecords(true);
     } catch (err) {
       setNewExerciseError(err instanceof Error ? err.message : 'Übung konnte nicht erstellt werden');
     } finally {
@@ -165,6 +179,28 @@ export default function CreateTrainingTemplatePage() {
                 value={name}
                 onChange={(e) => setName(e.target.value)}
                 required
+              />
+
+              <Divider />
+
+              <Typography variant="subtitle1">Workout Tracking</Typography>
+              <FormControlLabel
+                control={
+                  <Switch
+                    checked={trackInRecentWorkouts}
+                    onChange={(e) => setTrackInRecentWorkouts(e.target.checked)}
+                  />
+                }
+                label="In Letzte Workouts auf dem Dashboard anzeigen"
+              />
+              <FormControlLabel
+                control={
+                  <Switch
+                    checked={trackInWeeklyGoal}
+                    onChange={(e) => setTrackInWeeklyGoal(e.target.checked)}
+                  />
+                }
+                label="Fuer das Wochenziel mitzaehlen"
               />
 
               <Divider />
@@ -253,6 +289,15 @@ export default function CreateTrainingTemplatePage() {
               <MenuItem value="stretch">Stretch</MenuItem>
               <MenuItem value="counter">Ziel</MenuItem>
             </TextField>
+            <FormControlLabel
+              control={
+                <Switch
+                  checked={newExerciseShowInPersonalRecords}
+                  onChange={(e) => setNewExerciseShowInPersonalRecords(e.target.checked)}
+                />
+              }
+              label="In Bestleistungen anzeigen"
+            />
             {newExerciseType === 'counter' && (
               <>
                 <TextField

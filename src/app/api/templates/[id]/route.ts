@@ -54,6 +54,8 @@ export async function GET(
       userId: template.owner_user_id,
       name: template.name,
       exerciseIds: Array.isArray(template.exercise_ids) ? template.exercise_ids : [],
+      trackInRecentWorkouts: template.track_in_recent_workouts ?? true,
+      trackInWeeklyGoal: template.track_in_weekly_goal ?? true,
       createdAt: new Date(template.created_at),
       updatedAt: new Date(template.updated_at),
       lastUsedAt: template.last_used_at ? new Date(template.last_used_at) : undefined,
@@ -89,23 +91,38 @@ export async function PUT(
     const userId = session.user.id;
     const { id } = await params;
     const body = await request.json();
-    const { name, exerciseIds }: { name: string; exerciseIds: string[] } = body;
+    const {
+      name,
+      exerciseIds,
+      trackInRecentWorkouts,
+      trackInWeeklyGoal,
+    }: {
+      name?: string;
+      exerciseIds?: string[];
+      trackInRecentWorkouts?: boolean;
+      trackInWeeklyGoal?: boolean;
+    } = body;
 
-    if (!name || !exerciseIds || !Array.isArray(exerciseIds)) {
+    if (
+      name === undefined &&
+      exerciseIds === undefined &&
+      trackInRecentWorkouts === undefined &&
+      trackInWeeklyGoal === undefined
+    ) {
       return NextResponse.json<ApiResponse<WorkoutTemplate>>({
         success: false,
-        error: 'Name and exerciseIds are required',
+        error: 'No valid workout changes provided',
       }, { status: 400 });
     }
 
-    if (name.trim().length < 2) {
+    if (name !== undefined && name.trim().length < 2) {
       return NextResponse.json<ApiResponse<WorkoutTemplate>>({
         success: false,
         error: 'Name must be at least 2 characters long',
       }, { status: 400 });
     }
 
-    if (exerciseIds.length === 0) {
+    if (exerciseIds !== undefined && (!Array.isArray(exerciseIds) || exerciseIds.length === 0)) {
       return NextResponse.json<ApiResponse<WorkoutTemplate>>({
         success: false,
         error: 'At least one exercise is required',
@@ -126,29 +143,46 @@ export async function PUT(
 
     const now = new Date().toISOString();
 
-    // Update template
+    const updateFields: string[] = ['updated_at = $1'];
+    const updateValues: Array<string | boolean> = [now];
+
+    if (name !== undefined) {
+      updateFields.push(`name = $${updateValues.length + 1}`);
+      updateValues.push(name.trim());
+    }
+
+    if (trackInRecentWorkouts !== undefined) {
+      updateFields.push(`track_in_recent_workouts = $${updateValues.length + 1}`);
+      updateValues.push(trackInRecentWorkouts);
+    }
+
+    if (trackInWeeklyGoal !== undefined) {
+      updateFields.push(`track_in_weekly_goal = $${updateValues.length + 1}`);
+      updateValues.push(trackInWeeklyGoal);
+    }
+
     await query(
       `
       UPDATE workout_templates
-      SET name = $1, updated_at = $2
-      WHERE id = $3 AND owner_user_id = $4
+      SET ${updateFields.join(', ')}
+      WHERE id = $${updateValues.length + 1} AND owner_user_id = $${updateValues.length + 2}
     `,
-      [name.trim(), now, id, userId]
+      [...updateValues, id, userId]
     );
 
-    // Remove existing exercise associations
-    await query('DELETE FROM workout_template_items WHERE template_id = $1', [id]);
+    if (exerciseIds !== undefined) {
+      await query('DELETE FROM workout_template_items WHERE template_id = $1', [id]);
 
-    // Insert new exercise associations
-    for (let index = 0; index < exerciseIds.length; index++) {
-      const exerciseId = exerciseIds[index];
-      await query(
-        `
-        INSERT INTO workout_template_items (id, template_id, exercise_id, position)
-        VALUES ($1, $2, $3, $4)
-      `,
-        [uuidv4(), id, exerciseId, index]
-      );
+      for (let index = 0; index < exerciseIds.length; index++) {
+        const exerciseId = exerciseIds[index];
+        await query(
+          `
+          INSERT INTO workout_template_items (id, template_id, exercise_id, position)
+          VALUES ($1, $2, $3, $4)
+        `,
+          [uuidv4(), id, exerciseId, index]
+        );
+      }
     }
 
     // Fetch updated template with exercises
@@ -172,6 +206,8 @@ export async function PUT(
       userId: template.owner_user_id,
       name: template.name,
       exerciseIds: Array.isArray(template.exercise_ids) ? template.exercise_ids : [],
+      trackInRecentWorkouts: template.track_in_recent_workouts ?? true,
+      trackInWeeklyGoal: template.track_in_weekly_goal ?? true,
       createdAt: new Date(template.created_at),
       updatedAt: new Date(template.updated_at),
     };

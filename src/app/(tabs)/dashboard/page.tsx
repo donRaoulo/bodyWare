@@ -27,6 +27,7 @@ import { WorkoutCalendar } from '../../../components/WorkoutCalendar';
 interface DashboardStats {
   totalWorkouts: number;
   thisWeekWorkouts: number;
+/*  */  thisWeekGoalWorkouts: number;
   totalWeightKg: number;
 }
 
@@ -41,6 +42,7 @@ export default function DashboardPage() {
   const [stats, setStats] = useState<DashboardStats>({
     totalWorkouts: 0,
     thisWeekWorkouts: 0,
+    thisWeekGoalWorkouts: 0,
     totalWeightKg: 0,
   });
   const [loading, setLoading] = useState(true);
@@ -62,8 +64,8 @@ export default function DashboardPage() {
   });
   const [prs, setPrs] = useState<PersonalRecord[]>([]);
   const weeklyGoal = 3;
-  const weeklyProgress = Math.min(100, Math.round((stats.thisWeekWorkouts / weeklyGoal) * 100));
-  const workoutsToGoal = Math.max(0, weeklyGoal - stats.thisWeekWorkouts);
+  const weeklyProgress = Math.min(100, Math.round((stats.thisWeekGoalWorkouts / weeklyGoal) * 100));
+  const workoutsToGoal = Math.max(0, weeklyGoal - stats.thisWeekGoalWorkouts);
 
   useEffect(() => {
     fetchDashboardData();
@@ -97,7 +99,7 @@ export default function DashboardPage() {
       }
 
       const [sessionsResponse, statsResponse, calendarResponse, templatesResponse, prsResponse] = await Promise.all([
-        fetch(`/api/sessions?limit=${limitFromSettings}`),
+        fetch(`/api/sessions?limit=${limitFromSettings}&dashboardRecentOnly=true`),
         fetch('/api/sessions/stats'),
         fetch('/api/sessions?limit=1000'),
         fetch('/api/templates'),
@@ -211,11 +213,8 @@ export default function DashboardPage() {
                   Starte direkt deine naechste Einheit oder fuege neue Daten hinzu.
                 </Typography>
                 <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1 }}>
-                  <Button variant="contained" startIcon={<FitnessIcon />} component={Link} href="/trainings">
+                  <Button variant="text" startIcon={<FitnessIcon />} component={Link} href="/trainings">
                     Workout starten
-                  </Button>
-                  <Button variant="text" startIcon={<AddIcon />} component={Link} href="/trainings/create">
-                    Workout anlegen
                   </Button>
                   <Button variant="text" startIcon={<AddIcon />} component={Link} href="/measurements/create">
                     Messung eintragen
@@ -239,7 +238,7 @@ export default function DashboardPage() {
                   <Box>
                     <Typography variant="h6">Wochenziel</Typography>
                     <Typography variant="body2" color="text.secondary">
-                      {stats.thisWeekWorkouts} von {weeklyGoal} Workouts erledigt
+                      {stats.thisWeekGoalWorkouts} von {weeklyGoal} Workouts erledigt
                     </Typography>
                   </Box>
                   <Chip

@@ -10,7 +10,6 @@ import {
   FormControlLabel,
   Button,
   Slider,
-  
   Divider,
   Alert,
   CircularProgress,
@@ -21,6 +20,10 @@ import {
   DialogContent,
   DialogTitle,
   IconButton,
+  Tabs,
+  Tab,
+  TextField,
+  MenuItem,
 } from '@mui/material';
 import {
   Person as PersonIcon,
@@ -30,7 +33,7 @@ import {
   ArrowUpward as ArrowUpwardIcon,
   ArrowDownward as ArrowDownwardIcon,
 } from '@mui/icons-material';
-import { UserSettings } from '../../../lib/types';
+import { Exercise, ExerciseType, UserSettings, WorkoutTemplate } from '../../../lib/types';
 import { useTheme } from '../../../components/ThemeProvider';
 import { useSession } from 'next-auth/react';
 import { signOut } from 'next-auth/react';
@@ -59,6 +62,8 @@ export default function ProfilePage() {
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [dashboardDialogOpen, setDashboardDialogOpen] = useState(false);
+  const [workoutSettingsDialogOpen, setWorkoutSettingsDialogOpen] = useState(false);
+  const [workoutSettingsTab, setWorkoutSettingsTab] = useState(0);
   const [dashboardDraft, setDashboardDraft] = useState({
     showRecentWorkouts: true,
     showCalendar: true,
@@ -72,6 +77,42 @@ export default function ProfilePage() {
     dashboardWidgetOrder: ['quickstart', 'weeklyGoal', 'stats', 'prs', 'calendar', 'recent'],
   });
   const [aboutOpen, setAboutOpen] = useState(false);
+  const [managedTemplates, setManagedTemplates] = useState<WorkoutTemplate[]>([]);
+  const [managedExercises, setManagedExercises] = useState<Exercise[]>([]);
+  const [workoutSettingsLoading, setWorkoutSettingsLoading] = useState(false);
+  const [workoutSettingsError, setWorkoutSettingsError] = useState<string | null>(null);
+  const [savingWorkoutId, setSavingWorkoutId] = useState<string | null>(null);
+  const [savingExerciseId, setSavingExerciseId] = useState<string | null>(null);
+  const [editingWorkoutId, setEditingWorkoutId] = useState<string | null>(null);
+  const [editingExerciseId, setEditingExerciseId] = useState<string | null>(null);
+  const [workoutDrafts, setWorkoutDrafts] = useState<Record<string, {
+    name: string;
+    exerciseIds: string[];
+    trackInRecentWorkouts: boolean;
+    trackInWeeklyGoal: boolean;
+  }>>({});
+  const [exerciseDrafts, setExerciseDrafts] = useState<Record<string, {
+    name: string;
+    type: ExerciseType;
+    goal: string;
+    goalDueDate: string;
+    showInPersonalRecords: boolean;
+  }>>({});
+
+  const buildWorkoutDraft = (template: WorkoutTemplate) => ({
+    name: template.name,
+    exerciseIds: template.exerciseIds,
+    trackInRecentWorkouts: template.trackInRecentWorkouts ?? true,
+    trackInWeeklyGoal: template.trackInWeeklyGoal ?? true,
+  });
+
+  const buildExerciseDraft = (exercise: Exercise) => ({
+    name: exercise.name,
+    type: exercise.type,
+    goal: exercise.goal != null ? String(exercise.goal) : '',
+    goalDueDate: exercise.goalDueDate ?? '',
+    showInPersonalRecords: exercise.showInPersonalRecords ?? true,
+  });
 
   const dashboardWidgets = [
     { id: 'quickstart', label: 'Schnellstart' },
@@ -164,6 +205,174 @@ export default function ProfilePage() {
     setDashboardDialogOpen(true);
   };
 
+  const openWorkoutSettings = async () => {
+    try {
+      setWorkoutSettingsLoading(true);
+      setWorkoutSettingsError(null);
+      setWorkoutSettingsDialogOpen(true);
+      setWorkoutSettingsTab(0);
+      setEditingWorkoutId(null);
+      setEditingExerciseId(null);
+
+      const [templatesResponse, exercisesResponse] = await Promise.all([
+        fetch('/api/templates'),
+        fetch('/api/exercises'),
+      ]);
+
+      const templatesData = await templatesResponse.json();
+      if (!templatesResponse.ok || !templatesData.success) {
+        throw new Error(templatesData?.error || 'Workouts konnten nicht geladen werden');
+      }
+
+      const exercisesData = await exercisesResponse.json();
+      if (!exercisesResponse.ok || !exercisesData.success) {
+        throw new Error(exercisesData?.error || 'Uebungen konnten nicht geladen werden');
+      }
+
+      const nextTemplates = templatesData.data as WorkoutTemplate[];
+      const nextExercises = exercisesData.data as Exercise[];
+
+      setManagedTemplates(nextTemplates);
+      setManagedExercises(nextExercises);
+      setWorkoutDrafts(
+        Object.fromEntries(
+          nextTemplates.map((template) => [
+            template.id,
+            buildWorkoutDraft(template),
+          ])
+        )
+      );
+      setExerciseDrafts(
+        Object.fromEntries(
+          nextExercises
+            .filter((exercise) => !exercise.isDefault)
+            .map((exercise) => [
+              exercise.id,
+              buildExerciseDraft(exercise),
+            ])
+        )
+      );
+    } catch (err) {
+      setWorkoutSettingsError(err instanceof Error ? err.message : 'Einstellungen konnten nicht geladen werden');
+    } finally {
+      setWorkoutSettingsLoading(false);
+    }
+  };
+
+  const handleWorkoutDraftChange = (
+    templateId: string,
+    patch: Partial<{
+      name: string;
+      exerciseIds: string[];
+      trackInRecentWorkouts: boolean;
+      trackInWeeklyGoal: boolean;
+    }>
+  ) => {
+    setWorkoutDrafts((prev) => ({
+      ...prev,
+      [templateId]: {
+        ...prev[templateId],
+        ...patch,
+      },
+    }));
+  };
+
+  const handleExerciseDraftChange = (
+    exerciseId: string,
+    patch: Partial<{
+      name: string;
+      type: ExerciseType;
+      goal: string;
+      goalDueDate: string;
+      showInPersonalRecords: boolean;
+    }>
+  ) => {
+    setExerciseDrafts((prev) => ({
+      ...prev,
+      [exerciseId]: {
+        ...prev[exerciseId],
+        ...patch,
+      },
+    }));
+  };
+
+  const handleWorkoutSave = async (templateId: string) => {
+    const draft = workoutDrafts[templateId];
+    if (!draft) return;
+
+    try {
+      setSavingWorkoutId(templateId);
+      setWorkoutSettingsError(null);
+
+      const response = await fetch(`/api/templates/${templateId}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: draft.name,
+          exerciseIds: draft.exerciseIds,
+          trackInRecentWorkouts: draft.trackInRecentWorkouts,
+          trackInWeeklyGoal: draft.trackInWeeklyGoal,
+        }),
+      });
+
+      const data = await response.json();
+      if (!response.ok || !data.success) {
+        throw new Error(data?.error || 'Workout konnte nicht aktualisiert werden');
+      }
+
+      const updated = data.data as WorkoutTemplate;
+      setManagedTemplates((prev) => prev.map((template) => (template.id === templateId ? updated : template)));
+      setWorkoutDrafts((prev) => ({
+        ...prev,
+        [templateId]: buildWorkoutDraft(updated),
+      }));
+      setEditingWorkoutId(null);
+    } catch (err) {
+      setWorkoutSettingsError(err instanceof Error ? err.message : 'Workout konnte nicht aktualisiert werden');
+    } finally {
+      setSavingWorkoutId(null);
+    }
+  };
+
+  const handleExerciseSave = async (exerciseId: string) => {
+    const draft = exerciseDrafts[exerciseId];
+    if (!draft) return;
+
+    try {
+      setSavingExerciseId(exerciseId);
+      setWorkoutSettingsError(null);
+
+      const response = await fetch(`/api/exercises/${exerciseId}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: draft.name,
+          type: draft.type,
+          goal: draft.type === 'counter' ? Number(draft.goal) : null,
+          goalDueDate: draft.type === 'counter' ? draft.goalDueDate : null,
+          showInPersonalRecords: draft.showInPersonalRecords,
+        }),
+      });
+
+      const data = await response.json();
+      if (!response.ok || !data.success) {
+        throw new Error(data?.error || 'Uebung konnte nicht aktualisiert werden');
+      }
+
+      const updated = data.data as Exercise;
+      setManagedExercises((prev) => prev.map((exercise) => (exercise.id === exerciseId ? updated : exercise)));
+      setExerciseDrafts((prev) => ({
+        ...prev,
+        [exerciseId]: buildExerciseDraft(updated),
+      }));
+      setEditingExerciseId(null);
+    } catch (err) {
+      setWorkoutSettingsError(err instanceof Error ? err.message : 'Uebung konnte nicht aktualisiert werden');
+    } finally {
+      setSavingExerciseId(null);
+    }
+  };
+
   const handleDashboardLimitChange = (event: Event | React.SyntheticEvent, newValue: number | number[]) => {
     const limit = Array.isArray(newValue) ? newValue[0] : newValue;
     setDashboardDraft((prev) => ({ ...prev, dashboardSessionLimit: limit }));
@@ -222,6 +431,10 @@ export default function ProfilePage() {
       setError(err instanceof Error ? err.message : 'Failed to export measurements');
     }
   };
+
+  const customExercises = managedExercises.filter((exercise) => !exercise.isDefault);
+  const getExerciseName = (exerciseId: string) =>
+    managedExercises.find((exercise) => exercise.id === exerciseId)?.name || 'Unbekannte Uebung';
 
   if (loading) {
     return (
@@ -334,6 +547,20 @@ export default function ProfilePage() {
                 </Typography>
                 <Button variant="outlined" onClick={openDashboardSettings}>
                   Einstellungen bearbeiten
+                </Button>
+              </Box>
+
+              <Divider sx={{ my: 2 }} />
+
+              <Box sx={{ mb: 3 }}>
+                <Typography variant="subtitle1" gutterBottom>
+                  Workout Einstellungen
+                </Typography>
+                <Typography variant="body2" color="text.secondary" gutterBottom>
+                  Verwalte deine Workouts und selbst erstellten Uebungen an einem Ort
+                </Typography>
+                <Button variant="outlined" onClick={openWorkoutSettings}>
+                  Workout Einstellungen oeffnen
                 </Button>
               </Box>
 
@@ -475,6 +702,343 @@ export default function ProfilePage() {
           </Card>
         </Box>
       </Box>
+
+      <Dialog
+        open={workoutSettingsDialogOpen}
+        onClose={() => setWorkoutSettingsDialogOpen(false)}
+        fullWidth
+        maxWidth="md"
+      >
+        <DialogTitle>Workout Einstellungen</DialogTitle>
+        <DialogContent sx={{ pt: 1 }}>
+          <Tabs
+            value={workoutSettingsTab}
+            onChange={(_, nextValue) => setWorkoutSettingsTab(nextValue)}
+            sx={{ mb: 2 }}
+          >
+            <Tab label="Workouts" />
+            <Tab label="Uebungen" />
+          </Tabs>
+
+          {workoutSettingsError && (
+            <Alert severity="error" sx={{ mb: 2 }}>
+              {workoutSettingsError}
+            </Alert>
+          )}
+
+          {workoutSettingsLoading ? (
+            <Box sx={{ display: 'flex', justifyContent: 'center', py: 6 }}>
+              <CircularProgress />
+            </Box>
+          ) : (
+            <>
+              {workoutSettingsTab === 0 && (
+                <Stack spacing={2}>
+                  {managedTemplates.length === 0 ? (
+                    <Typography variant="body2" color="text.secondary">
+                      Du hast noch keine Workouts erstellt.
+                    </Typography>
+                  ) : (
+                    managedTemplates.map((template) => {
+                      const draft = workoutDrafts[template.id];
+                      const isEditing = editingWorkoutId === template.id;
+                      return (
+                        <Card key={template.id} variant="outlined">
+                          <CardContent>
+                            <Box
+                              sx={{
+                                mb: isEditing ? 2 : 0,
+                                display: 'flex',
+                                alignItems: 'flex-start',
+                                justifyContent: 'space-between',
+                                gap: 2,
+                              }}
+                            >
+                              <Box sx={{ flex: 1 }}>
+                                <Typography variant="subtitle1" fontWeight={600}>
+                                  {template.name}
+                                </Typography>
+                                {isEditing ? (
+                                  <Typography variant="body2" color="text.secondary">
+                                    Bearbeite Workout und Tracking fuer Dashboard und Wochenziel.
+                                  </Typography>
+                                ) : (
+                                  <Stack direction="row" spacing={1} useFlexGap flexWrap="wrap" sx={{ mt: 1 }}>
+                                    <Chip
+                                      size="small"
+                                      label={`${template.exerciseIds.length} ${template.exerciseIds.length === 1 ? 'Uebung' : 'Uebungen'}`}
+                                    />
+                                    <Chip
+                                      size="small"
+                                      color={(template.trackInRecentWorkouts ?? true) ? 'primary' : 'default'}
+                                      variant={(template.trackInRecentWorkouts ?? true) ? 'filled' : 'outlined'}
+                                      label="Letzte Workouts"
+                                    />
+                                    <Chip
+                                      size="small"
+                                      color={(template.trackInWeeklyGoal ?? true) ? 'primary' : 'default'}
+                                      variant={(template.trackInWeeklyGoal ?? true) ? 'filled' : 'outlined'}
+                                      label="Wochenziel"
+                                    />
+                                  </Stack>
+                                )}
+                              </Box>
+                              {!isEditing && (
+                                <Button
+                                  variant="outlined"
+                                  size="small"
+                                  onClick={() => setEditingWorkoutId(template.id)}
+                                >
+                                  Bearbeiten
+                                </Button>
+                              )}
+                            </Box>
+
+                            {draft && isEditing && (
+                              <Stack spacing={2}>
+                                <TextField
+                                  label="Workout Name"
+                                  value={draft.name}
+                                  onChange={(e) => handleWorkoutDraftChange(template.id, { name: e.target.value })}
+                                  fullWidth
+                                />
+                                <Box>
+                                  <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
+                                    Uebungen im Workout
+                                  </Typography>
+                                  <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1 }}>
+                                    {managedExercises.map((exercise) => {
+                                      const selected = draft.exerciseIds.includes(exercise.id);
+                                      return (
+                                        <Chip
+                                          key={exercise.id}
+                                          label={exercise.name}
+                                          color={selected ? 'primary' : 'default'}
+                                          variant={selected ? 'filled' : 'outlined'}
+                                          onClick={() =>
+                                            handleWorkoutDraftChange(template.id, {
+                                              exerciseIds: selected
+                                                ? draft.exerciseIds.filter((id) => id !== exercise.id)
+                                                : [...draft.exerciseIds, exercise.id],
+                                            })
+                                          }
+                                          sx={{ cursor: 'pointer' }}
+                                        />
+                                      );
+                                    })}
+                                  </Box>
+                                </Box>
+                                <FormControlLabel
+                                  control={
+                                    <Switch
+                                      checked={draft.trackInRecentWorkouts}
+                                      onChange={(e) =>
+                                        handleWorkoutDraftChange(template.id, {
+                                          trackInRecentWorkouts: e.target.checked,
+                                        })
+                                      }
+                                    />
+                                  }
+                                  label="In Letzte Workouts auf dem Dashboard anzeigen"
+                                />
+                                <FormControlLabel
+                                  control={
+                                    <Switch
+                                      checked={draft.trackInWeeklyGoal}
+                                      onChange={(e) =>
+                                        handleWorkoutDraftChange(template.id, {
+                                          trackInWeeklyGoal: e.target.checked,
+                                        })
+                                      }
+                                    />
+                                  }
+                                  label="Fuer das Wochenziel mitzaehlen"
+                                />
+                                <Box sx={{ display: 'flex', justifyContent: 'flex-end', gap: 1 }}>
+                                  <Button
+                                    variant="text"
+                                    onClick={() => {
+                                      setWorkoutDrafts((prev) => ({
+                                        ...prev,
+                                        [template.id]: buildWorkoutDraft(template),
+                                      }));
+                                      setEditingWorkoutId(null);
+                                    }}
+                                    disabled={savingWorkoutId === template.id}
+                                  >
+                                    Abbrechen
+                                  </Button>
+                                  <Button
+                                    variant="contained"
+                                    onClick={() => handleWorkoutSave(template.id)}
+                                    disabled={savingWorkoutId === template.id || draft.exerciseIds.length === 0}
+                                  >
+                                    {savingWorkoutId === template.id ? 'Speichert...' : 'Speichern'}
+                                  </Button>
+                                </Box>
+                              </Stack>
+                            )}
+                          </CardContent>
+                        </Card>
+                      );
+                    })
+                  )}
+                </Stack>
+              )}
+
+              {workoutSettingsTab === 1 && (
+                <Stack spacing={2}>
+                  {customExercises.length === 0 ? (
+                    <Typography variant="body2" color="text.secondary">
+                      Du hast noch keine eigenen Uebungen erstellt.
+                    </Typography>
+                  ) : (
+                    customExercises.map((exercise) => {
+                      const draft = exerciseDrafts[exercise.id];
+                      const isEditing = editingExerciseId === exercise.id;
+                      return (
+                        <Card key={exercise.id} variant="outlined">
+                          <CardContent>
+                            <Box
+                              sx={{
+                                mb: isEditing ? 2 : 0,
+                                display: 'flex',
+                                alignItems: 'flex-start',
+                                justifyContent: 'space-between',
+                                gap: 2,
+                              }}
+                            >
+                              <Box sx={{ flex: 1 }}>
+                                <Typography variant="subtitle1" fontWeight={600}>
+                                  {exercise.name}
+                                </Typography>
+                                {isEditing ? (
+                                  <Typography variant="body2" color="text.secondary">
+                                    Passe Name, Typ und optionale Zielwerte an.
+                                  </Typography>
+                                ) : (
+                                  <Stack direction="row" spacing={1} useFlexGap flexWrap="wrap" sx={{ mt: 1 }}>
+                                    <Chip size="small" label={`Typ: ${exercise.type}`} />
+                                    <Chip
+                                      size="small"
+                                      color={(exercise.showInPersonalRecords ?? true) ? 'primary' : 'default'}
+                                      variant={(exercise.showInPersonalRecords ?? true) ? 'filled' : 'outlined'}
+                                      label={(exercise.showInPersonalRecords ?? true) ? 'Bestleistung an' : 'Bestleistung aus'}
+                                    />
+                                    {exercise.type === 'counter' && exercise.goal != null && (
+                                      <Chip size="small" variant="outlined" label={`Ziel: ${exercise.goal}`} />
+                                    )}
+                                  </Stack>
+                                )}
+                              </Box>
+                              {!isEditing && (
+                                <Button
+                                  variant="outlined"
+                                  size="small"
+                                  onClick={() => setEditingExerciseId(exercise.id)}
+                                >
+                                  Bearbeiten
+                                </Button>
+                              )}
+                            </Box>
+
+                            {draft && isEditing && (
+                              <Stack spacing={2}>
+                                <TextField
+                                  label="Uebungsname"
+                                  value={draft.name}
+                                  onChange={(e) => handleExerciseDraftChange(exercise.id, { name: e.target.value })}
+                                  fullWidth
+                                />
+                                <TextField
+                                  select
+                                  label="Typ"
+                                  value={draft.type}
+                                  onChange={(e) =>
+                                    handleExerciseDraftChange(exercise.id, {
+                                      type: e.target.value as ExerciseType,
+                                      goal: e.target.value === 'counter' ? draft.goal : '',
+                                      goalDueDate: e.target.value === 'counter' ? draft.goalDueDate : '',
+                                    })
+                                  }
+                                  fullWidth
+                                >
+                                  <MenuItem value="strength">Krafttraining</MenuItem>
+                                  <MenuItem value="cardio">Cardio</MenuItem>
+                                  <MenuItem value="endurance">Ausdauer</MenuItem>
+                                  <MenuItem value="stretch">Stretch</MenuItem>
+                                  <MenuItem value="counter">Ziel</MenuItem>
+                                </TextField>
+                                <FormControlLabel
+                                  control={
+                                    <Switch
+                                      checked={draft.showInPersonalRecords}
+                                      onChange={(e) =>
+                                        handleExerciseDraftChange(exercise.id, {
+                                          showInPersonalRecords: e.target.checked,
+                                        })
+                                      }
+                                    />
+                                  }
+                                  label="In Bestleistungen anzeigen"
+                                />
+                                {draft.type === 'counter' && (
+                                  <>
+                                    <TextField
+                                      label="Ziel"
+                                      type="number"
+                                      value={draft.goal}
+                                      onChange={(e) => handleExerciseDraftChange(exercise.id, { goal: e.target.value })}
+                                      fullWidth
+                                    />
+                                    <TextField
+                                      label="Bis Datum"
+                                      type="date"
+                                      value={draft.goalDueDate}
+                                      onChange={(e) => handleExerciseDraftChange(exercise.id, { goalDueDate: e.target.value })}
+                                      InputLabelProps={{ shrink: true }}
+                                      fullWidth
+                                    />
+                                  </>
+                                )}
+                                <Box sx={{ display: 'flex', justifyContent: 'flex-end', gap: 1 }}>
+                                  <Button
+                                    variant="text"
+                                    onClick={() => {
+                                      setExerciseDrafts((prev) => ({
+                                        ...prev,
+                                        [exercise.id]: buildExerciseDraft(exercise),
+                                      }));
+                                      setEditingExerciseId(null);
+                                    }}
+                                    disabled={savingExerciseId === exercise.id}
+                                  >
+                                    Abbrechen
+                                  </Button>
+                                  <Button
+                                    variant="contained"
+                                    onClick={() => handleExerciseSave(exercise.id)}
+                                    disabled={savingExerciseId === exercise.id}
+                                  >
+                                    {savingExerciseId === exercise.id ? 'Speichert...' : 'Speichern'}
+                                  </Button>
+                                </Box>
+                              </Stack>
+                            )}
+                          </CardContent>
+                        </Card>
+                      );
+                    })
+                  )}
+                </Stack>
+              )}
+            </>
+          )}
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setWorkoutSettingsDialogOpen(false)}>Schliessen</Button>
+        </DialogActions>
+      </Dialog>
 
       <Dialog open={dashboardDialogOpen} onClose={() => setDashboardDialogOpen(false)} fullWidth maxWidth="sm">
         <DialogTitle>Dashboard Einstellungen</DialogTitle>

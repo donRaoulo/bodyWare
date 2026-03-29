@@ -2,11 +2,11 @@ import { Pool, PoolClient, QueryResult, QueryResultRow } from 'pg';
 import { DEFAULT_EXERCISES } from './types';
 import { v4 as uuidv4 } from 'uuid';
 
-const connectionString = process.env.DATABASE_URL || 'postgres://bodyware:bodyware@localhost:5432/bodyware';
+const connectionString = process.env.DATABASE_URL || 'postgres://bodyware:bodyware@localhost:5433/bodyware';
 
 export const pool = new Pool({ connectionString });
 
-const SCHEMA_VERSION = 2;
+const SCHEMA_VERSION = 4;
 const SCHEMA_LOCK_ID = 742991;
 const EXERCISE_TYPES = ['strength', 'cardio', 'endurance', 'stretch', 'counter'] as const;
 const DEFAULT_DASHBOARD_CONFIG = {
@@ -32,7 +32,7 @@ export async function initDatabase() {
       try {
         await client.query('SELECT pg_advisory_lock($1)', [SCHEMA_LOCK_ID]);
         await client.query('BEGIN');
-        await createOrMigrateSchemaV2(client);
+        await createOrMigrateSchema(client);
         await seedDefaultData(client);
         await client.query('COMMIT');
         initialized = true;
@@ -57,7 +57,7 @@ export async function initDatabase() {
   }
 }
 
-async function createOrMigrateSchemaV2(client: PoolClient) {
+async function createOrMigrateSchema(client: PoolClient) {
   await client.query(`
     CREATE TABLE IF NOT EXISTS app_schema_version (
       id INTEGER PRIMARY KEY CHECK (id = 1),
@@ -70,29 +70,42 @@ async function createOrMigrateSchemaV2(client: PoolClient) {
     'SELECT version FROM app_schema_version WHERE id = 1'
   );
   if (versionResult.rows[0]?.version === SCHEMA_VERSION) {
+    await ensureSchemaV4Columns(client);
+    return;
+  }
+
+  if (versionResult.rows[0]?.version === 2) {
+    await ensureSchemaV4Columns(client);
+    await setSchemaVersion(client, SCHEMA_VERSION);
+    return;
+  }
+
+  if (versionResult.rows[0]?.version === 3) {
+    await ensureSchemaV4Columns(client);
+    await setSchemaVersion(client, SCHEMA_VERSION);
     return;
   }
 
   // One-time destructive reset because schema v2 is intentionally redesigned.
   await client.query(`
-    DROP TABLE IF EXISTS user_saved_templates;
-    DROP TABLE IF EXISTS workout_session_items;
-    DROP TABLE IF EXISTS workout_sessions;
-    DROP TABLE IF EXISTS workout_template_items;
-    DROP TABLE IF EXISTS workout_templates;
-    DROP TABLE IF EXISTS body_entries;
-    DROP TABLE IF EXISTS user_preferences;
-    DROP TABLE IF EXISTS exercises;
+    DROP TABLE IF EXISTS user_saved_templates CASCADE;
+    DROP TABLE IF EXISTS workout_session_items CASCADE;
+    DROP TABLE IF EXISTS workout_sessions CASCADE;
+    DROP TABLE IF EXISTS workout_template_items CASCADE;
+    DROP TABLE IF EXISTS workout_templates CASCADE;
+    DROP TABLE IF EXISTS body_entries CASCADE;
+    DROP TABLE IF EXISTS user_preferences CASCADE;
+    DROP TABLE IF EXISTS exercises CASCADE;
 
-    DROP TABLE IF EXISTS template_exercises;
-    DROP TABLE IF EXISTS exercise_sessions;
-    DROP TABLE IF EXISTS body_measurements;
-    DROP TABLE IF EXISTS user_settings;
+    DROP TABLE IF EXISTS template_exercises CASCADE;
+    DROP TABLE IF EXISTS exercise_sessions CASCADE;
+    DROP TABLE IF EXISTS body_measurements CASCADE;
+    DROP TABLE IF EXISTS user_settings CASCADE;
 
-    DROP TABLE IF EXISTS accounts;
-    DROP TABLE IF EXISTS sessions;
-    DROP TABLE IF EXISTS verification_tokens;
-    DROP TABLE IF EXISTS users;
+    DROP TABLE IF EXISTS accounts CASCADE;
+    DROP TABLE IF EXISTS sessions CASCADE;
+    DROP TABLE IF EXISTS verification_tokens CASCADE;
+    DROP TABLE IF EXISTS users CASCADE;
   `);
 
   const typeCheck = EXERCISE_TYPES.map((type) => `'${type}'`).join(', ');
@@ -149,6 +162,7 @@ async function createOrMigrateSchemaV2(client: PoolClient) {
       type TEXT NOT NULL CHECK (type IN (${typeCheck})),
       goal_value NUMERIC,
       goal_due_date DATE,
+      show_in_personal_records BOOLEAN NOT NULL DEFAULT TRUE,
       is_builtin BOOLEAN NOT NULL DEFAULT FALSE,
       created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
       updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
@@ -162,6 +176,8 @@ async function createOrMigrateSchemaV2(client: PoolClient) {
       name TEXT NOT NULL CHECK (char_length(trim(name)) >= 2),
       description TEXT,
       is_builtin BOOLEAN NOT NULL DEFAULT FALSE,
+      track_in_recent_workouts BOOLEAN NOT NULL DEFAULT TRUE,
+      track_in_weekly_goal BOOLEAN NOT NULL DEFAULT TRUE,
       created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
       updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
       archived_at TIMESTAMPTZ
@@ -251,6 +267,33 @@ async function createOrMigrateSchemaV2(client: PoolClient) {
     CREATE INDEX idx_body_entries_user_measured ON body_entries(user_id, measured_at DESC);
   `);
 
+  await setSchemaVersion(client, SCHEMA_VERSION);
+}
+
+async function ensureSchemaV4Columns(client: PoolClient) {
+  await client.query(`
+    ALTER TABLE workout_templates
+      ADD COLUMN IF NOT EXISTS track_in_recent_workouts BOOLEAN NOT NULL DEFAULT TRUE;
+
+    ALTER TABLE workout_templates
+      ADD COLUMN IF NOT EXISTS track_in_weekly_goal BOOLEAN NOT NULL DEFAULT TRUE;
+
+    UPDATE workout_templates
+    SET
+      track_in_recent_workouts = COALESCE(track_in_recent_workouts, TRUE),
+      track_in_weekly_goal = COALESCE(track_in_weekly_goal, TRUE)
+    WHERE track_in_recent_workouts IS NULL OR track_in_weekly_goal IS NULL;
+
+    ALTER TABLE exercises
+      ADD COLUMN IF NOT EXISTS show_in_personal_records BOOLEAN NOT NULL DEFAULT TRUE;
+
+    UPDATE exercises
+    SET show_in_personal_records = COALESCE(show_in_personal_records, TRUE)
+    WHERE show_in_personal_records IS NULL;
+  `);
+}
+
+async function setSchemaVersion(client: PoolClient, version: number) {
   await client.query(
     `
     INSERT INTO app_schema_version (id, version, updated_at)
@@ -258,7 +301,7 @@ async function createOrMigrateSchemaV2(client: PoolClient) {
     ON CONFLICT (id)
     DO UPDATE SET version = EXCLUDED.version, updated_at = NOW();
     `,
-    [SCHEMA_VERSION]
+    [version]
   );
 }
 
@@ -290,11 +333,12 @@ async function seedDefaultData(client: PoolClient) {
         type,
         goal_value,
         goal_due_date,
+        show_in_personal_records,
         is_builtin,
         created_at,
         updated_at,
         archived_at
-      ) VALUES ($1, NULL, NULL, $2, $3, NULL, NULL, TRUE, NOW(), NOW(), NULL)
+      ) VALUES ($1, NULL, NULL, $2, $3, NULL, NULL, TRUE, TRUE, NOW(), NOW(), NULL)
       `,
       [uuidv4(), exercise.name, exercise.type]
     );

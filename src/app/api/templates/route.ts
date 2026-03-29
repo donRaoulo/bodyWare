@@ -42,6 +42,8 @@ export async function GET() {
       userId: row.owner_user_id,
       name: row.name,
       exerciseIds: Array.isArray(row.exercise_ids) ? row.exercise_ids : [],
+      trackInRecentWorkouts: row.track_in_recent_workouts ?? true,
+      trackInWeeklyGoal: row.track_in_weekly_goal ?? true,
       createdAt: new Date(row.created_at),
       updatedAt: new Date(row.updated_at),
       lastUsedAt: row.last_used_at ? new Date(row.last_used_at) : undefined,
@@ -73,7 +75,17 @@ export async function POST(request: NextRequest) {
 
     const userId = session.user.id;
     const body = await request.json();
-    const { name, exerciseIds }: { name: string; exerciseIds: string[] } = body;
+    const {
+      name,
+      exerciseIds,
+      trackInRecentWorkouts,
+      trackInWeeklyGoal,
+    }: {
+      name: string;
+      exerciseIds: string[];
+      trackInRecentWorkouts?: boolean;
+      trackInWeeklyGoal?: boolean;
+    } = body;
 
     if (!name || !exerciseIds || !Array.isArray(exerciseIds)) {
       return NextResponse.json<ApiResponse<WorkoutTemplate>>({
@@ -102,10 +114,26 @@ export async function POST(request: NextRequest) {
     // Insert template
     await query(
       `
-      INSERT INTO workout_templates (id, owner_user_id, name, created_at, updated_at)
-      VALUES ($1, $2, $3, $4, $5)
+      INSERT INTO workout_templates (
+        id,
+        owner_user_id,
+        name,
+        track_in_recent_workouts,
+        track_in_weekly_goal,
+        created_at,
+        updated_at
+      )
+      VALUES ($1, $2, $3, $4, $5, $6, $7)
     `,
-      [templateId, userId, name.trim(), now, now]
+      [
+        templateId,
+        userId,
+        name.trim(),
+        trackInRecentWorkouts ?? true,
+        trackInWeeklyGoal ?? true,
+        now,
+        now,
+      ]
     );
 
     // Insert exercise associations
@@ -141,6 +169,8 @@ export async function POST(request: NextRequest) {
       userId: template.owner_user_id,
       name: template.name,
       exerciseIds: Array.isArray(template.exercise_ids) ? template.exercise_ids : [],
+      trackInRecentWorkouts: template.track_in_recent_workouts ?? true,
+      trackInWeeklyGoal: template.track_in_weekly_goal ?? true,
       createdAt: new Date(template.created_at),
       updatedAt: new Date(template.updated_at),
     };
