@@ -25,11 +25,34 @@ import type { Exercise, WorkoutTemplate, WorkoutSession, ExerciseSession } from 
 import { Add as AddIcon, Delete as DeleteIcon, Check as CheckIcon } from '@mui/icons-material';
 import { useNavigationGuard } from '@/components/NavigationGuardProvider';
 
+type SessionExerciseDraft = {
+  exerciseId: string;
+  exerciseName: string;
+  type: Exercise['type'];
+  strength?: { sets: { weight: number | null; reps: number | null }[] };
+  cardio?: { time: number | null; level: number | null; distance: number | null };
+  endurance?: { time: number | null; distance: number | null; pace: number | null };
+  stretch?: { completed: boolean };
+  counter?: { value: number | null };
+};
+
+type WorkoutDraftSnapshot = {
+  sessionExercises: SessionExerciseDraft[];
+  savedExerciseIds: string[];
+  savedAt: number;
+};
+
+const WORKOUT_DRAFT_MAX_AGE_MS = 3 * 60 * 60 * 1000;
+
 export default function StartWorkoutPage() {
   const searchParams = useSearchParams();
   const router = useRouter();
   const templateId = searchParams.get('templateId');
   const dateParam = searchParams.get('date');
+  const draftStorageKey = useMemo(
+    () => (templateId ? `bodyware:start-workout:${templateId}:${dateParam ?? 'default'}` : null),
+    [dateParam, templateId]
+  );
 
   const [template, setTemplate] = useState<WorkoutTemplate | null>(null);
   const [exercises, setExercises] = useState<Exercise[]>([]);
@@ -37,21 +60,11 @@ export default function StartWorkoutPage() {
   const [loading, setLoading] = useState(false);
   const [starting, setStarting] = useState(false);
   const [hasTouched, setHasTouched] = useState(false);
-  const [sessionExercises, setSessionExercises] = useState<
-    {
-      exerciseId: string;
-      exerciseName: string;
-      type: Exercise['type'];
-      strength?: { sets: { weight: number | null; reps: number | null }[] };
-      cardio?: { time: number | null; level: number | null; distance: number | null };
-      endurance?: { time: number | null; distance: number | null; pace: number | null };
-      stretch?: { completed: boolean };
-      counter?: { value: number | null };
-    }[]
-  >([]);
+  const [sessionExercises, setSessionExercises] = useState<SessionExerciseDraft[]>([]);
   const [maxWeightByExercise, setMaxWeightByExercise] = useState<Record<string, number | undefined>>({});
   const [counterTotalByExercise, setCounterTotalByExercise] = useState<Record<string, number>>({});
   const [savedExerciseIds, setSavedExerciseIds] = useState<Set<string>>(() => new Set());
+  const [draftReady, setDraftReady] = useState(false);
   const { setGuard, clearGuard, requestNavigation } = useNavigationGuard();
 
   const formatDueDate = (value: string | null) => {
@@ -82,7 +95,6 @@ export default function StartWorkoutPage() {
   const totalExercises = sessionExercises.length;
   const savedExercisesCount = savedExerciseIds.size;
   const progressPercent = totalExercises > 0 ? Math.round((savedExercisesCount / totalExercises) * 100) : 0;
-  const nextOpenExerciseId = sessionExercises.find((ex) => !savedExerciseIds.has(ex.exerciseId))?.exerciseId;
 
   useEffect(() => {
     if (!templateId) return;
@@ -91,6 +103,7 @@ export default function StartWorkoutPage() {
         setLoading(true);
         setError(null);
         setHasTouched(false);
+        setDraftReady(false);
         setCounterTotalByExercise({});
 
         const [templateRes, exercisesRes, sessionsRes, countersRes] = await Promise.all([
@@ -145,7 +158,7 @@ export default function StartWorkoutPage() {
         setMaxWeightByExercise(maxWeights);
         setCounterTotalByExercise(counterTotals);
 
-        const defaultSessionExercises = templateData.data.exerciseIds.map((id: string) => {
+        const defaultSessionExercises: SessionExerciseDraft[] = templateData.data.exerciseIds.map((id: string) => {
           const ex = exercisesData.data.find((e: Exercise) => e.id === id);
           const last = lastByExercise.get(id);
 
@@ -210,9 +223,78 @@ export default function StartWorkoutPage() {
             counter: defaultCounter,
           };
         });
-        setSessionExercises(defaultSessionExercises);
-        setSavedExerciseIds(new Set());
-        setHasTouched(false);
+
+        let nextSessionExercises = defaultSessionExercises;
+        let nextSavedExerciseIds = new Set<string>();
+        let nextHasTouched = false;
+
+        if (draftStorageKey && typeof window !== 'undefined') {
+          const rawDraft = window.localStorage.getItem(draftStorageKey);
+          if (rawDraft) {
+            try {
+              const parsedDraft = JSON.parse(rawDraft) as WorkoutDraftSnapshot;
+              const isExpired =
+                typeof parsedDraft.savedAt !== 'number' ||
+                Date.now() - parsedDraft.savedAt > WORKOUT_DRAFT_MAX_AGE_MS;
+
+              if (isExpired) {
+                window.localStorage.removeItem(draftStorageKey);
+              } else {
+              const savedById = new Map(
+                Array.isArray(parsedDraft.sessionExercises)
+                  ? parsedDraft.sessionExercises.map((exercise) => [exercise.exerciseId, exercise])
+                  : []
+              );
+
+              nextSessionExercises = defaultSessionExercises.map((exercise) => {
+                const restoredExercise = savedById.get(exercise.exerciseId);
+                if (!restoredExercise || restoredExercise.type !== exercise.type) {
+                  return exercise;
+                }
+                return {
+                  ...exercise,
+                  ...restoredExercise,
+                  exerciseId: exercise.exerciseId,
+                  exerciseName: exercise.exerciseName,
+                  type: exercise.type,
+                };
+              });
+
+              const validExerciseIds = new Set(defaultSessionExercises.map((exercise) => exercise.exerciseId));
+              nextSavedExerciseIds = new Set(
+                Array.isArray(parsedDraft.savedExerciseIds)
+                  ? parsedDraft.savedExerciseIds.filter((exerciseId) => validExerciseIds.has(exerciseId))
+                  : []
+              );
+              nextHasTouched = nextSavedExerciseIds.size > 0 || nextSessionExercises.some((exercise) => {
+                if (exercise.type === 'strength') {
+                  return (exercise.strength?.sets || []).some((set) => set.weight != null || set.reps != null);
+                }
+                if (exercise.type === 'cardio') {
+                  return [exercise.cardio?.time, exercise.cardio?.level, exercise.cardio?.distance].some((value) => value != null);
+                }
+                if (exercise.type === 'endurance') {
+                  return exercise.endurance?.time != null || exercise.endurance?.distance != null;
+                }
+                if (exercise.type === 'stretch') {
+                  return Boolean(exercise.stretch?.completed);
+                }
+                if (exercise.type === 'counter') {
+                  return exercise.counter?.value != null;
+                }
+                return false;
+              });
+              }
+            } catch {
+              window.localStorage.removeItem(draftStorageKey);
+            }
+          }
+        }
+
+        setSessionExercises(nextSessionExercises);
+        setSavedExerciseIds(nextSavedExerciseIds);
+        setHasTouched(nextHasTouched);
+        setDraftReady(true);
       } catch (err) {
         setError(err instanceof Error ? err.message : 'Laden fehlgeschlagen');
       } finally {
@@ -220,7 +302,23 @@ export default function StartWorkoutPage() {
       }
     };
     load();
-  }, [templateId]);
+  }, [draftStorageKey, templateId]);
+
+  useEffect(() => {
+    if (!draftStorageKey || !draftReady || typeof window === 'undefined') return;
+
+    if (!hasTouched) {
+      window.localStorage.removeItem(draftStorageKey);
+      return;
+    }
+
+    const snapshot: WorkoutDraftSnapshot = {
+      sessionExercises,
+      savedExerciseIds: Array.from(savedExerciseIds),
+      savedAt: Date.now(),
+    };
+    window.localStorage.setItem(draftStorageKey, JSON.stringify(snapshot));
+  }, [draftReady, draftStorageKey, hasTouched, savedExerciseIds, sessionExercises]);
 
   useEffect(() => {
     if (hasTouched && !starting) {
@@ -342,6 +440,9 @@ export default function StartWorkoutPage() {
       if (!res.ok || !data.success) {
         throw new Error(data?.error || 'Workout konnte nicht gespeichert werden');
       }
+      if (draftStorageKey && typeof window !== 'undefined') {
+        window.localStorage.removeItem(draftStorageKey);
+      }
       router.push('/dashboard');
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Workout konnte nicht gespeichert werden');
@@ -444,13 +545,6 @@ export default function StartWorkoutPage() {
     );
   };
 
-  const scrollToNextOpenExercise = () => {
-    if (!nextOpenExerciseId) return;
-    const target = document.getElementById(`exercise-${nextOpenExerciseId}`);
-    if (!target) return;
-    target.scrollIntoView({ behavior: 'smooth', block: 'center' });
-  };
-
   if (!templateId) {
     return (
       <Box sx={{ p: 4 }}>
@@ -492,7 +586,7 @@ export default function StartWorkoutPage() {
                     <Chip
                       size="small"
                       color={allSaved ? 'success' : 'primary'}
-                      label={`${savedExercisesCount}/${totalExercises} gespeichert`}
+                      label={`${savedExercisesCount}/${totalExercises} fertig`}
                     />
                   </Box>
                   <LinearProgress variant="determinate" value={progressPercent} sx={{ height: 8, borderRadius: 999 }} />
@@ -505,7 +599,7 @@ export default function StartWorkoutPage() {
               )}
               {allSaved && sessionExercises.length > 0 && (
                 <Alert severity="success" sx={{ mb: 1 }}>
-                  Alle Uebungen gespeichert. Du kannst unten das Workout abschliessen.
+                  Alle Uebungen sind fertig. Du kannst unten das Workout abschliessen.
                 </Alert>
               )}
               <List dense sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
@@ -575,7 +669,7 @@ export default function StartWorkoutPage() {
                             minWidth: 'auto',
                           }}
                         >
-                          {isSaved ? 'Gespeichert' : 'Speichern'}
+                          Fertig
                         </Button>
                       </Box>
                       {ex.type === 'strength' && (
@@ -831,20 +925,15 @@ export default function StartWorkoutPage() {
                 }}
               >
                 <Typography variant="caption" color="text.secondary">
-                  {savedExercisesCount}/{totalExercises} Uebungen gespeichert
+                  {savedExercisesCount}/{totalExercises} Uebungen fertig
                 </Typography>
                 <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
-                {!allSaved && (
-                  <Button variant="outlined" onClick={scrollToNextOpenExercise}>
-                    Naechste offene Uebung
+                  <Button variant="text" onClick={() => requestNavigation('/trainings')}>
+                    Zurueck
                   </Button>
-                )}
-                <Button variant="text" onClick={() => requestNavigation('/trainings')}>
-                  Zurueck
-                </Button>
-                <Button variant="contained" onClick={startWorkout} disabled={starting || !savedExercisesCount}>
-                  {starting ? 'Speichert...' : 'Workout speichern'}
-                </Button>
+                  <Button variant="contained" onClick={startWorkout} disabled={starting || !savedExercisesCount}>
+                    {starting ? 'Speichert...' : 'Workout speichern'}
+                  </Button>
                 </Box>
               </Box>
             </>
