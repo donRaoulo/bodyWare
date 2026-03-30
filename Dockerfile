@@ -1,12 +1,11 @@
-FROM node:20-alpine AS deps
-WORKDIR /app
-COPY package*.json ./
-RUN npm ci
+## syntax=docker/dockerfile:1.7
 
 FROM node:20-alpine AS builder
 WORKDIR /app
 ENV NEXT_TELEMETRY_DISABLED=1
-COPY --from=deps /app/node_modules ./node_modules
+ENV npm_config_update_notifier=false
+COPY package*.json ./
+RUN --mount=type=cache,target=/root/.npm npm ci --no-audit --no-fund
 COPY . .
 RUN npm run build
 
